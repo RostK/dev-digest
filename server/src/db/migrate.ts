@@ -2,7 +2,7 @@ import 'dotenv/config';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
@@ -33,8 +33,11 @@ export async function runMigrations(databaseUrl: string): Promise<void> {
   }
 }
 
-// CLI entrypoint
-if (import.meta.url === `file://${process.argv[1]}`) {
+// CLI entrypoint. Compare via pathToFileURL so it works on Windows too —
+// `file://${process.argv[1]}` would be `file://C:\…` there, which never equals
+// import.meta.url's `file:///C:/…`, silently skipping the migration run.
+const entryPath = process.argv[1];
+if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {
   const url = process.env.DATABASE_URL;
   if (!url) {
     console.error('DATABASE_URL is required');

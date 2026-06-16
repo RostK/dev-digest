@@ -17,6 +17,8 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 
 ## What Doesn't Work
 
+- 2026-06-16 — POSIX-only path/URL string assumptions keep breaking on Windows (dev AND CI run on Windows here). Seen twice: building a file URL via `` `file://${process.argv[1]}` `` (migrate.ts) and deriving a parent dir via `lastIndexOf('/')` (indexer test). Always use node:url `pathToFileURL`/`fileURLToPath` for file URLs and node:path `dirname`/`join` for paths — never hand-concatenate `/` or `file://`. Evidence: server/src/db/migrate.ts; test/indexer-pipeline.test.ts.
+
 ## Codebase Patterns
 
 - 2026-06-16 — `@devdigest/shared` is vendored INDEPENDENTLY into server/src/vendor/shared/ and client/src/vendor/shared/ (one tsconfig path per app, NO sync script) — a contract change (new zod field, etc.) must be applied to BOTH copies or the apps drift. Ignore server/clones/RostK/dev-digest/** (a nested self-review checkout, not part of the build). Evidence: server/tsconfig.json paths; server/src/vendor/shared/contracts/{trace,platform}.ts.
@@ -39,6 +41,7 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 
 ## Recurring Errors & Fixes
 
+- 2026-06-16 — `pnpm db:migrate` silently does NOTHING on Windows: it exits 0, prints no "✓ migrations applied", and applies no migration — symptom is an "applied" migration whose new table/index is still missing. Cause: the CLI guard `import.meta.url === `file://${process.argv[1]}`` never matches (import.meta.url is `file:///C:/…`; argv[1] is a backslash path). Fix: `pathToFileURL(process.argv[1]).href` (+ a truthy guard on argv[1] for noUncheckedIndexedAccess). Evidence: server/src/db/migrate.ts (CLI entrypoint), PR #4.
 - 2026-06-16 — OpenRouter reviews fail with `401 {"error":{"message":"User not found"}}`
   when the stored `OPENROUTER_API_KEY` is revoked/unknown or a Provisioning key — NOT
   when it's missing (a missing key throws `ConfigError: OPENROUTER_API_KEY is not
@@ -53,6 +56,8 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
   a Provisioning key stored as `OPENROUTER_API_KEY`; the studio's test-connection gave a
   false green (it pinged the public `/models`). Fixed the test to authenticate and
   replaced the key with a real inference key. See Decisions + Recurring Errors & Fixes.
+- 2026-06-16 — Fixed `pnpm db:migrate` no-op on Windows (entrypoint guard) — surfaced when
+  an "applied" migration left its index missing. See What Doesn't Work + Recurring Errors.
 - 2026-06-16 — Reworked the pulls-list cost query (review feedback): replaced
   fetch-all-done-runs + JS dedup with DISTINCT ON (pr_id) + a composite
   (pr_id, status, ran_at) index (migration 0010). See Codebase Patterns.
