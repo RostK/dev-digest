@@ -20,3 +20,30 @@ export function formatCostCompact(usd: number | null | undefined): string {
 export function formatTokensShort(tokensIn: number, tokensOut: number): string {
   return `${(tokensIn / 1000).toFixed(0)}k→${(tokensOut / 1000).toFixed(1)}k`;
 }
+
+/**
+ * Total tokens (in + out) for a run, comma-grouped with a "tok" suffix, e.g.
+ * "9,119 tok". Used in the dense PR timeline rows. Null when neither count is
+ * known (→ caller omits it).
+ */
+export function formatTokensTotal(
+  tokensIn: number | null | undefined,
+  tokensOut: number | null | undefined,
+): string | null {
+  if (tokensIn == null && tokensOut == null) return null;
+  const total = (tokensIn ?? 0) + (tokensOut ?? 0);
+  return `${total.toLocaleString("en-US")} tok`;
+}
+
+/**
+ * Cost with enough precision to tell sub-cent runs apart, e.g. "$0.0013" /
+ * "$0.07" (the compact format would collapse both cheap runs to "$0.001").
+ * Null/undefined → null (caller omits it); a real $0 → "$0.00".
+ */
+export function formatCostPrecise(usd: number | null | undefined): string | null {
+  if (usd == null) return null;
+  if (usd <= 0) return "$0.00";
+  if (usd >= 0.01) return `$${usd.toFixed(2)}`;
+  if (usd >= 0.0001) return `$${usd.toFixed(4)}`;
+  return "<$0.0001";
+}

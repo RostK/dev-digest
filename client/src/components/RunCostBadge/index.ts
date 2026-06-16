@@ -1,2 +1,7 @@
 export { RunCostBadge } from "./RunCostBadge";
-export { formatCostCompact, formatTokensShort } from "./format";
+export {
+  formatCostCompact,
+  formatTokensShort,
+  formatTokensTotal,
+  formatCostPrecise,
+} from "./format";

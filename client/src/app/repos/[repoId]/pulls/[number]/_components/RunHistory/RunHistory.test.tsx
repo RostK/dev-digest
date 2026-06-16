@@ -74,3 +74,24 @@ describe("RunHistory — outcome badge", () => {
     expect(screen.getByText("running")).toBeInTheDocument();
   });
 });
+
+describe("RunHistory — usage line (tokens · cost)", () => {
+  it("a done run shows comma-grouped total tokens + precise cost", () => {
+    renderRuns([
+      run({ status: "done", tokens_in: 8000, tokens_out: 1119, cost_usd: 0.0013, score: 72, findings_count: 1 }),
+    ]);
+    expect(screen.getByText("9,119 tok · $0.0013")).toBeInTheDocument();
+  });
+
+  it("shows tokens but omits cost when the run is unpriced (cost_usd null)", () => {
+    renderRuns([run({ status: "done", tokens_in: 100, tokens_out: 50, cost_usd: null })]);
+    expect(screen.getByText("150 tok")).toBeInTheDocument();
+  });
+
+  it("a failed run shows no usage line", () => {
+    renderRuns([
+      run({ status: "failed", tokens_in: 0, tokens_out: 0, cost_usd: null, score: null, blockers: null }),
+    ]);
+    expect(screen.queryByText(/tok/)).not.toBeInTheDocument();
+  });
+});
