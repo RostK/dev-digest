@@ -104,9 +104,46 @@ Secrets (API keys, `GITHUB_TOKEN`) are **not** part of `AppConfig` — they go
 through `SecretsProvider` (`~/.devdigest/secrets.json`, mode `0600`, with
 `process.env` as a fallback), per the **Where keys live** note at the top.
 
-Migrations are **not** applied on boot — run `pnpm db:migrate` (pgvector is
-enabled by migration `0000`). `pnpm db:seed` is idempotent demo data
-(`acme/payments-api`, PR #482, the two built-in agents).
+Migrations are **not** applied on boot — run `pnpm db:migrate` (the migrate runner
+enables the `vector`/pgvector extension first — see [Migrations](#migrations)).
+`pnpm db:seed` is idempotent demo data (`acme/payments-api`, PR #482, the two
+built-in agents).
+
+## Migrations
+
+**Append-only — never hand-edit an applied migration.** `server/src/db/migrations/` is
+a Drizzle migration chain, not free-form SQL. Three artifacts work together:
+
+- `0000_init.sql … 0009_*.sql` — an **ordered** chain; each file is the *diff* against
+  the previous state, not the full schema.
+- `meta/_journal.json` — the registry (order, tag, timestamp of every migration).
+- `meta/NNNN_snapshot.json` — a full-schema snapshot after each step. `pnpm db:generate`
+  (drizzle-kit) diffs the **latest snapshot** against `db/schema/*.ts` to compute the
+  next migration.
+
+`pnpm db:migrate` (`src/db/migrate.ts`) first runs `CREATE EXTENSION IF NOT EXISTS
+vector` (pgvector must exist before any `vector(1536)` column is created), then applies
+the pending files and records each in the `__drizzle_migrations` table **by content
+hash**. It is idempotent.
+
+**Why you must not hand-edit an applied migration:**
+
+1. **A migration is history, not current state.** To change the schema, edit
+   `db/schema/*.ts` and `pnpm db:generate` a *new* migration — never rewrite an applied one.
+2. **Drizzle checks the hash.** An applied file is tracked in `__drizzle_migrations` by
+   its content hash; editing it makes the hash diverge, so it won't re-apply and the DB
+   silently drifts from the file.
+3. **Snapshot ↔ SQL drift.** The next `db:generate` diffs from `meta/*_snapshot.json`;
+   editing a `.sql` without its snapshot (or vice-versa) gives the generator a wrong
+   baseline and a broken next diff.
+4. **Environment desync.** Your local DB, CI (testcontainers in `*.it.test.ts`), and
+   teammates all replay the same sequence. A local edit means your schema ≠ CI's — the
+   classic `relation … does not exist` failure.
+5. **pgvector ordering.** Apply via `pnpm db:migrate` (which enables the extension
+   first), not raw `psql`, and don't reorder the early migrations.
+
+**Correct workflow:** edit `db/schema/*.ts` → `pnpm db:generate` (writes a new
+`00NN_*.sql` + updates the snapshot and journal) → `pnpm db:migrate`.
 
 ## Review context (non-obvious)
 
