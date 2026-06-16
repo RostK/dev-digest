@@ -131,12 +131,14 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
     }
 
     // Cost of each PR's latest COMPLETED run = tokens × model price (computed
-    // here, no extra model call). Mirrors the score lookup: newest-first, first
-    // seen per PR wins. Non-'done' runs are excluded → unreviewed PRs get null.
+    // here, no extra model call). DISTINCT ON (pr_id) returns exactly ONE row
+    // per PR — its latest 'done' run — resolved in Postgres instead of fetching
+    // every run and discarding all but the first. Backed by the
+    // (pr_id, status, ran_at) index on agent_runs. Unreviewed PRs get null.
     const latestRunCostByPr = new Map<string, number | null>();
     if (prIds.length > 0) {
       const runRows = await container.db
-        .select({
+        .selectDistinctOn([t.agentRuns.prId], {
           prId: t.agentRuns.prId,
           model: t.agentRuns.model,
           tokensIn: t.agentRuns.tokensIn,
@@ -144,9 +146,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         })
         .from(t.agentRuns)
         .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')))
-        .orderBy(desc(t.agentRuns.ranAt));
+        // DISTINCT ON requires the leading ORDER BY to match the distinct key;
+        // ran_at DESC then picks the latest run within each pr_id group.
+        .orderBy(t.agentRuns.prId, desc(t.agentRuns.ranAt));
       for (const rr of runRows) {
-        if (rr.prId && !latestRunCostByPr.has(rr.prId)) {
+        if (rr.prId) {
           latestRunCostByPr.set(rr.prId, runCostUsd(rr.model, rr.tokensIn, rr.tokensOut));
         }
       }
