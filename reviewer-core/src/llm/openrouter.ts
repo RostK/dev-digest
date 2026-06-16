@@ -155,6 +155,40 @@ export class OpenRouterProvider implements LLMProvider {
       (a, b) => (a.pricing?.completionPerM ?? Infinity) - (b.pricing?.completionPerM ?? Infinity),
     );
   }
+
+  /**
+   * Validate the API key against OpenRouter's AUTHENTICATED key endpoint
+   * (`GET /key`). Unlike `listModels()` — which hits the PUBLIC `/models` and
+   * returns the full catalogue for ANY (even bogus) key — this actually
+   * authenticates: a revoked/unknown key fails, and a Provisioning key (which
+   * manages keys but CANNOT run inference) is flagged. Use this to TEST a key;
+   * `listModels()` green-lights keys that then 401 on every review.
+   */
+  async verifyKey(): Promise<{ ok: boolean; isProvisioning: boolean; message: string }> {
+    const res = await fetch(`${this.baseURL}/key`, {
+      headers: { Authorization: `Bearer ${this.apiKey}` },
+    });
+    if (!res.ok) {
+      let message = `${res.status} ${res.statusText}`;
+      try {
+        const body = (await res.json()) as { error?: { message?: string } };
+        if (body.error?.message) message = body.error.message;
+      } catch {
+        // non-JSON error body — keep the HTTP status line
+      }
+      return { ok: false, isProvisioning: false, message };
+    }
+    const json = (await res.json()) as { data?: { is_provisioning_key?: boolean } };
+    const isProvisioning = json.data?.is_provisioning_key === true;
+    return {
+      ok: !isProvisioning,
+      isProvisioning,
+      message: isProvisioning
+        ? 'This is a Provisioning key — it manages keys but cannot run inference. Use a standard API key.'
+        : 'authenticated',
+    };
+  }
+
   async complete(_req: CompletionRequest): Promise<CompletionResult> {
     throw new Error(NOT_SUPPORTED);
   }
