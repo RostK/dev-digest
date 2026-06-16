@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { agents } from './agents';
 import { pullRequests } from './pulls';
@@ -28,7 +28,13 @@ export const agentRuns = pgTable('agent_runs', {
   score: integer('score'),
   /** Findings that tripped the agent's gate (severity ≥ ciFailOn). */
   blockers: integer('blockers'),
-});
+}, (t) => ({
+  // Serves prId-scoped reads — especially the pulls-list "latest 'done' run per
+  // PR" lookup (DISTINCT ON pr_id … WHERE status='done' ORDER BY pr_id, ran_at
+  // DESC). With status as an equality middle column, this also supports the
+  // (pr_id, ran_at) ordering. agent_runs had no pr_id index before.
+  prStatusRanAtIdx: index('agent_runs_pr_status_ran_at_idx').on(t.prId, t.status, t.ranAt),
+}));
 
 /** Whole trace of one run as a SINGLE jsonb document. */
 export const runTraces = pgTable('run_traces', {

@@ -25,6 +25,7 @@ function run(o: Partial<RunSummary>): RunSummary {
     duration_ms: 1000,
     tokens_in: 100,
     tokens_out: 50,
+    cost_usd: null,
     findings_count: 0,
     grounding: "0/0 passed",
     ran_at: "2026-06-11T18:44:34.000Z",
@@ -71,5 +72,26 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+});
+
+describe("RunHistory — usage line (tokens · cost)", () => {
+  it("a done run shows comma-grouped total tokens + precise cost", () => {
+    renderRuns([
+      run({ status: "done", tokens_in: 8000, tokens_out: 1119, cost_usd: 0.0013, score: 72, findings_count: 1 }),
+    ]);
+    expect(screen.getByText("9,119 tok · $0.0013")).toBeInTheDocument();
+  });
+
+  it("shows tokens but omits cost when the run is unpriced (cost_usd null)", () => {
+    renderRuns([run({ status: "done", tokens_in: 100, tokens_out: 50, cost_usd: null })]);
+    expect(screen.getByText("150 tok")).toBeInTheDocument();
+  });
+
+  it("a failed run shows no usage line", () => {
+    renderRuns([
+      run({ status: "failed", tokens_in: 0, tokens_out: 0, cost_usd: null, score: null, blockers: null }),
+    ]);
+    expect(screen.queryByText(/tok/)).not.toBeInTheDocument();
   });
 });

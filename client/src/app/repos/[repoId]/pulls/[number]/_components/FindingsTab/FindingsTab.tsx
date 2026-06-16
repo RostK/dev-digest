@@ -71,6 +71,14 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // Reviews carry verdict/findings; cost + tokens live on the agent_run row
+  // (matched by run_id) — index the runs so each accordion can show its cost.
+  const runById = React.useMemo(() => {
+    const m = new Map<string, RunSummary>();
+    for (const r of prRuns ?? []) m.set(r.run_id, r);
+    return m;
+  }, [prRuns]);
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -158,6 +166,7 @@ export function FindingsTab({
           <ReviewRunAccordion
             key={review.id}
             review={review}
+            run={review.run_id ? runById.get(review.run_id) ?? null : null}
             prId={prId}
             defaultOpen={i === 0}
             repoFullName={repoFullName}

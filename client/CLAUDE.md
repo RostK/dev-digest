@@ -10,11 +10,11 @@ Data comes from the Fastify API over hooks — no server-side fetching.
 
 ## Conventions
 
-- **Pages are thin.** `app/**/page.tsx` delegates to a colocated `_components/<Name>/`
+- **Pages are thin.** `src/app/**/page.tsx` delegates to a colocated `_components/<Name>/`
   folder = `Name.tsx` + `index.ts` barrel + optional `styles.ts` / `constants.ts` /
   `helpers.ts` + `Name.test.tsx`.
-- **Data**: never `fetch` in a component. Use TanStack Query hooks in `lib/hooks/*`
-  over `lib/api.ts` (`api.get/post/put/patch/del<T>`). Query keys `["resource", ...ctx]`;
+- **Data**: never `fetch` in a component. Use TanStack Query hooks in `src/lib/hooks/*`
+  over `src/lib/api.ts` (`api.get/post/put/patch/del<T>`). Query keys `["resource", ...ctx]`;
   invalidate on mutation.
 - **Styling (gotcha)**: Tailwind is installed but the app styles with **CSS design
   tokens** — `var(--accent)`, `var(--crit)`, … via inline / `styles.ts` `CSSProperties`.

@@ -2,6 +2,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { RunSummary, RunTrace } from '@devdigest/shared';
+import { runCostUsd } from '../../../adapters/llm/pricing.js';
 
 // ---- in-flight / history --------------------------------------------------
 
@@ -59,6 +60,9 @@ export async function listRunsForPull(
     duration_ms: run.durationMs,
     tokens_in: run.tokensIn,
     tokens_out: run.tokensOut,
+    // Cost = tokens × model price, computed here (no extra model call). Only
+    // for completed runs; failed/cancelled/running → null → "—" in the UI.
+    cost_usd: run.status === 'done' ? runCostUsd(run.model, run.tokensIn, run.tokensOut) : null,
     findings_count: run.findingsCount,
     grounding: run.grounding,
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
