@@ -13,9 +13,16 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 
 ## What Works
 
+- 2026-06-16 — Lazy "fetch on hover" for PR-list rows: `usePrReviews(prId, { enabled })` gated on a per-row hover flag (set once via the hover card's `onOpen`), sharing the `["reviews", prId]` query key so the count chips show instantly (from `pr.findings`) while the title list loads only when hovered — and the PR-detail page is warm afterwards. Prefer adding an optional `{ enabled }` to the existing query hook over writing a second hook. Evidence: client/src/lib/hooks/reviews.ts (usePrReviews), client/src/app/repos/[repoId]/pulls/_components/PRRow/PRRow.tsx.
+
 ## What Doesn't Work
 
+- 2026-06-16 — A `position:absolute` dropdown/popover anchored to a PR-list ROW gets clipped: the table card (`s.tableCard`) sets `overflow:hidden` (for rounded row corners), which clips ALL absolutely-positioned descendants. The house `Dropdown` only works there because it sits at the table top and opens downward within the tall card. For a hover card on an arbitrary row, render it via `createPortal(…, document.body)` with `position:fixed` measured from the trigger's `getBoundingClientRect()` (add a small close-delay so crossing the gap to the portaled card doesn't dismiss it). Evidence: client/src/app/repos/[repoId]/pulls/styles.ts (tableCard), client/src/components/SeverityIndicators/FindingsHoverCard.tsx.
+
 ## Codebase Patterns
+
+- 2026-06-16 — `SeverityBadge` in `compact` mode renders icon + count ONLY (no text label), so it exposes just a bare number to screen readers and is untargetable by `getByText`. Wrap each chip in a span with `title`+`aria-label` (e.g. `"2 Critical"` from `SEV[sev].label`) — gives a hover tooltip, an accessible name, AND a stable test handle (`getByTitle("2 Critical")`; `getByLabelText` is unreliable on a plain span). Evidence: client/src/components/SeverityIndicators/SeverityIndicators.tsx.
+- 2026-06-16 — `/pulls/:id/reviews` (usePrReviews) returns reviews newest-first (`desc(createdAt)`) AND includes BOTH `summary` and `review` kinds. To mirror the PR-list findings count — which the server computes from the latest `kind:"review"` run's OPEN findings — pick `data.find(r => r.kind === "review")`, NOT `data[0]` (a summary row can be first). Evidence: client/src/app/repos/[repoId]/pulls/_components/PRRow/PRRow.tsx; server reviewsForPull (review.repo.ts).
 
 - 2026-06-16 — Review-run cards render `ReviewRecord` (reviews table: verdict/score/findings) which has NO tokens or cost — those live on `RunSummary` (agent_runs), keyed by `run_id`. PR Detail already fetches both (`usePrReviews` + `usePrRuns`); match `review.run_id → RunSummary` in `FindingsTab` and pass the run into the accordion rather than widening the reviews query. Evidence: client/src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx (runById map), ReviewRunAccordion.tsx.
 - 2026-06-16 — Adding a Pull Requests list column = add the key to `COLUMN_KEYS` + widen the `GRID` template string (both in pulls/constants.ts) + add a cell to PRRow.tsx in the SAME position (cells render in fixed order — there is no key→cell mapping) + add i18n `prReview.list.columns.<key>`. The header row auto-maps labels from COLUMN_KEYS; GRID drives both headRow and rows. Evidence: client/src/app/repos/[repoId]/pulls/constants.ts, _components/PRRow/PRRow.tsx, styles.ts.
@@ -24,6 +31,7 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 ## Decisions
 
 - 2026-06-16 — Per-run cost is formatted at DIFFERENT precision per surface, on purpose: 2–3 dp compact (`formatCostCompact`) for the PR-list column + verdict card header, but 4 dp (`formatCostPrecise`) for the dense PR timeline usage line — sub-cent runs ($0.0013 vs $0.0014) must stay distinguishable there, where 3 dp would collapse both to "$0.001". Don't "unify" the formatters. Evidence: client/src/components/RunCostBadge/format.ts.
+- 2026-06-16 — Severity counts are computed in TWO places that must agree: server `rollupSeverities` (PR-list payload) and the client `countsOf` mirror (PR-detail timeline rows, derived from the already-loaded reviews — no extra fetch). Both count OPEN (non-dismissed) findings from the latest `kind:"review"` run. Kept as deliberate mirrors rather than denormalizing the breakdown onto `RunSummary`; if you change one rule (e.g. include dismissed), change both. Evidence: client/src/components/SeverityIndicators/helpers.ts (countsOf), server/src/modules/pulls/status.ts (rollupSeverities).
 
 ## Tool & Library Notes
 
@@ -35,5 +43,6 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 
 - 2026-06-16 — Added per-run cost/token display (`RunCostBadge`, 2 variants: compact `$0.012` / detailed `$0.014 · 8.2K→1.3K`, `—` for null) to the PR list COST column, the verdict card header + verdict banner, and the Run Trace stats tile. Badge only formats; cost is server-computed. See Codebase Patterns.
 - 2026-06-16 — Added a 5th surface: the PR timeline (RunHistory) rows now show "9,119 tok · $0.0013" (comma-grouped total tokens + 4-dp cost) under the timestamp, for settled runs only. Client-only — RunSummary already carries tokens_in/out + cost_usd. See Decisions (per-surface precision).
+- 2026-06-16 — Added severity indicators (CRITICAL/WARNING/SUGGESTION icon+count cluster + a lazy hover card listing findings) to the PR-list (new Findings column) and the PR-detail timeline rows. New shared `components/SeverityIndicators/` with its OWN barrel (dodges the stale-barrel HMR gotcha — see Tool & Library Notes). Server half (per-PR open-finding counts on the list payload) was finished alongside. See What Works / What Doesn't Work / Codebase Patterns / Decisions.
 
 ## Open Questions

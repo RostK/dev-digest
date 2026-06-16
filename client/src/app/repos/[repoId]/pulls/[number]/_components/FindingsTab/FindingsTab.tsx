@@ -79,6 +79,16 @@ export function FindingsTab({
     return m;
   }, [prRuns]);
 
+  // Findings per run, keyed by run_id — lets the timeline rows show the severity
+  // cluster + hover card from the already-loaded reviews (no extra fetch).
+  const findingsByRunId = React.useMemo(() => {
+    const m = new Map<string, FindingRecord[]>();
+    for (const rv of runs) {
+      if (rv.run_id) m.set(rv.run_id, rv.findings);
+    }
+    return m;
+  }, [runs]);
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -139,6 +149,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            findingsByRunId={findingsByRunId}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

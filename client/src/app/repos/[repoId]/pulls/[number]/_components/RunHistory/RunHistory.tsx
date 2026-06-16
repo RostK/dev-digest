@@ -3,8 +3,14 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
-import type { RunSummary, PrCommit } from "@devdigest/shared";
+import type { RunSummary, PrCommit, FindingRecord } from "@devdigest/shared";
 import { formatTokensTotal, formatCostPrecise } from "@/components/RunCostBadge";
+import {
+  SeverityIndicators,
+  FindingsHoverCard,
+  countsOf,
+  openFindings,
+} from "@/components/SeverityIndicators";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -88,12 +94,16 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
+  findingsByRunId,
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** Findings per run_id (from the already-loaded reviews) — drives the per-run
+   *  severity cluster + hover card. Absent for failed/running runs. */
+  findingsByRunId?: Map<string, FindingRecord[]>;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -196,12 +206,35 @@ export function RunHistory({
                   {r.error}
                 </div>
               )}
-              {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
-                </div>
-              )}
+              {settled &&
+                (() => {
+                  const open = openFindings(findingsByRunId?.get(r.run_id) ?? []);
+                  // Reviewed runs with findings show the severity cluster + hover
+                  // card; runs with none (approved / no review row) keep the
+                  // plain count line.
+                  if (open.length > 0) {
+                    return (
+                      <div style={{ display: "flex", alignItems: "center", fontSize: 12, color: "var(--text-muted)" }}>
+                        <FindingsHoverCard
+                          title={t("findingsCard.hoverTitleRun", { count: open.length })}
+                          findings={open}
+                          emptyLabel={t("findingsCard.none")}
+                        >
+                          <SeverityIndicators counts={countsOf(open)} />
+                        </FindingsHoverCard>
+                        {(r.blockers ?? 0) > 0 ? (
+                          <span style={{ marginLeft: 2 }}>{t("runStatus.blockers", { count: r.blockers ?? 0 })}</span>
+                        ) : null}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      {t("runStatus.findings", { count: r.findings_count ?? 0 })}
+                      {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
+                    </div>
+                  );
+                })()}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}

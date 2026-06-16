@@ -173,6 +173,16 @@ export const PrMeta = z.object({
   // Cost (USD) of the PR's latest COMPLETED run = tokens × model price; list
   // endpoint only, null/absent until a priced run completes.
   cost_usd: z.number().nullish(),
+  // Per-severity counts of the latest review's open (non-dismissed) findings.
+  // List endpoint only; null/absent until reviewed. Shape mirrors
+  // SeverityCounts in pulls/status.ts.
+  findings: z
+    .object({
+      critical: z.number().int(),
+      warning: z.number().int(),
+      suggestion: z.number().int(),
+    })
+    .nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

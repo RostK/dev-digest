@@ -5,13 +5,35 @@
  * and shows the review score ring.
  */
 import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { RunSummary } from "@devdigest/shared";
+import type { RunSummary, FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 import { RunHistory } from "./RunHistory";
 
 afterEach(cleanup);
+
+function finding(o: Partial<FindingRecord>): FindingRecord {
+  return {
+    id: "f1",
+    severity: "CRITICAL",
+    category: "security",
+    title: "Hardcoded Stripe secret key",
+    file: "src/config.ts",
+    start_line: 11,
+    end_line: 11,
+    rationale: "x",
+    suggestion: null,
+    confidence: 0.9,
+    kind: "finding",
+    trifecta_components: null,
+    evidence: null,
+    review_id: "rv1",
+    accepted_at: null,
+    dismissed_at: null,
+    ...o,
+  };
+}
 
 function run(o: Partial<RunSummary>): RunSummary {
   return {
@@ -35,10 +57,10 @@ function run(o: Partial<RunSummary>): RunSummary {
   };
 }
 
-function renderRuns(runs: RunSummary[]) {
+function renderRuns(runs: RunSummary[], findingsByRunId?: Map<string, FindingRecord[]>) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <RunHistory runs={runs} onOpenTrace={() => {}} />
+      <RunHistory runs={runs} findingsByRunId={findingsByRunId} onOpenTrace={() => {}} />
     </NextIntlClientProvider>,
   );
 }
@@ -72,6 +94,34 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+});
+
+describe("RunHistory — per-run severity cluster", () => {
+  it("a settled run with findings shows the severity cluster + 'in this run' hover card", () => {
+    const runFindings = [
+      finding({ id: "f1", severity: "CRITICAL" }),
+      finding({ id: "f2", severity: "CRITICAL", title: "SSRF in webhook forwarder" }),
+      finding({ id: "f3", severity: "WARNING", category: "perf", title: "N+1 query in user list" }),
+    ];
+    renderRuns(
+      [run({ status: "done", findings_count: 3, blockers: 2, score: 38 })],
+      new Map([["run-1", runFindings]]),
+    );
+    // Cluster: two CRITICAL + one WARNING (open findings), blockers still shown.
+    expect(screen.getByTitle("2 Critical")).toBeInTheDocument();
+    expect(screen.getByTitle("1 Warning")).toBeInTheDocument();
+    expect(screen.getByText(/2 blockers/)).toBeInTheDocument();
+
+    fireEvent.mouseEnter(screen.getByTitle("2 Critical").parentElement!.parentElement!);
+    expect(screen.getByRole("dialog")).toHaveTextContent("3 findings in this run");
+    expect(screen.getByText("SSRF in webhook forwarder")).toBeInTheDocument();
+  });
+
+  it("a settled run with no matching findings keeps the plain count line", () => {
+    renderRuns([run({ status: "done", findings_count: 3, blockers: 0, score: 72 })], new Map());
+    expect(screen.getByText(/3 finding/)).toBeInTheDocument();
+    expect(screen.queryByTitle(/Critical|Warning|Suggestion/)).not.toBeInTheDocument();
   });
 });
 

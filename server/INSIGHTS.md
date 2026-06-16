@@ -24,6 +24,7 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 - 2026-06-16 — `@devdigest/shared` is vendored INDEPENDENTLY into server/src/vendor/shared/ and client/src/vendor/shared/ (one tsconfig path per app, NO sync script) — a contract change (new zod field, etc.) must be applied to BOTH copies or the apps drift. Ignore server/clones/RostK/dev-digest/** (a nested self-review checkout, not part of the build). Evidence: server/tsconfig.json paths; server/src/vendor/shared/contracts/{trace,platform}.ts.
 - 2026-06-16 — GET routes declare only `params`/`body` schemas (fastify-type-provider-zod validates INPUT, not output), so a handler's returned object is serialized as-is — surface a new computed field (e.g. cost_usd) by adding it to the returned object + the vendored zod type, no response-schema change needed. Trade-off: response/contract drift is NOT caught at the route boundary; keep the vendored contract in sync by hand. Evidence: server/src/modules/pulls/routes.ts, server/src/modules/reviews/routes.ts.
 - 2026-06-16 — For "latest row per PR" lookups use `db.selectDistinctOn([t.agentRuns.prId], {…}).where(… status='done').orderBy(t.agentRuns.prId, desc(t.agentRuns.ranAt))` — one row per PR resolved in Postgres — NOT fetch-all-rows-then-dedup-in-JS (unbounded as re-reviews accumulate). agent_runs had NO prId index; added composite (pr_id, status, ran_at) where the status equality also satisfies the (pr_id, ran_at) ordering. NB the latest-review-score lookup in the same route still uses the JS-dedup pattern (pre-existing). Evidence: server/src/modules/pulls/routes.ts (latestRunCostByPr), server/src/db/schema/runs.ts (agent_runs_pr_status_ran_at_idx).
+- 2026-06-16 — The pulls-list per-PR FINDINGS severity breakdown reuses the existing latest-review JS-dedup map: capture the latest review's `id` (not just its score), then ONE `inArray(t.findings.reviewId, latestReviewIds)` query filtered `isNull(t.findings.dismissedAt)`, bucketed by PR and tallied via the shared `rollupSeverities` (pulls/status.ts). OPEN findings only, latest `kind:"review"` per PR — so it matches what the PR-detail surface computes. Surfaced via the pre-existing `PrMeta.findings` contract field (GET routes serialize the returned object; no response schema). Evidence: server/src/modules/pulls/routes.ts (severityByPr), server/src/modules/pulls/status.ts (rollupSeverities).
 
 ## Decisions
 
@@ -33,6 +34,7 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
   Reason: OpenRouter's `/models` is public, so the old `listModels()` check showed a
   green "OK — N models" for revoked/wrong keys that then 401 on every review. Evidence:
   server/src/modules/settings/routes.ts (openrouter branch).
+- 2026-06-16 — A reviewed-but-clean PR (latest review has zero OPEN findings) returns `findings: null` on the list — same as never-reviewed — because the severity bucket map simply has no entry for it. Accepted: the client cluster renders "—" for both null and all-zero, so they're visually identical; not worth a "reviewed, 0 findings" sentinel. Evidence: server/src/modules/pulls/routes.ts (`severityByPr.get(r.id) ?? null`).
 
 ## Tool & Library Notes
 
@@ -62,5 +64,6 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
   fetch-all-done-runs + JS dedup with DISTINCT ON (pr_id) + a composite
   (pr_id, status, ran_at) index (migration 0010). See Codebase Patterns.
 - 2026-06-16 — Added per-run cost/tokens end-to-end (cost_usd on RunSummary/RunStats/PrMeta in both vendor copies; `runCostUsd` helper; surfaced in 3 GET routes). Chose compute-at-read over re-adding the dropped cost column. See Decisions + Codebase Patterns + Tool & Library Notes.
+- 2026-06-16 — Finished the staged server half of the severity-indicators feature: the `PrMeta.findings` contract field + `rollupSeverities`/`isNull` imports were pre-staged on the branch, but the pulls-list handler never computed or returned the value (a stale comment even said it was "intentionally not surfaced"). Wired the per-PR open-finding severity counts into the returned rows. See Codebase Patterns + Decisions.
 
 ## Open Questions

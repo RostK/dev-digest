@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
@@ -8,7 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { runCostUsd } from '../../adapters/llm/pricing.js';
-import { deriveReviewStatus } from './status.js';
+import { deriveReviewStatus, rollupSeverities, type SeverityCounts } from './status.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -112,22 +112,45 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE per PR for the list's score ring. Computed on read
-    // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // Latest-review SCORE + per-severity FINDINGS breakdown per PR for the
+    // list's score ring and findings indicators. Computed on read from
+    // reviews/findings (no FK denorm); the list is small, so a couple of
+    // IN-queries + JS grouping is cheap.
     const prIds = rows.map((r) => r.id);
-    const latestReviewByPr = new Map<string, { score: number | null }>();
+    const latestReviewByPr = new Map<string, { id: string; score: number | null }>();
     if (prIds.length > 0) {
       const reviewRows = await container.db
-        .select({ prId: t.reviews.prId, score: t.reviews.score })
+        .select({ id: t.reviews.id, prId: t.reviews.prId, score: t.reviews.score })
         .from(t.reviews)
         .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
         .orderBy(desc(t.reviews.createdAt));
       // Rows are newest-first → first seen per PR is the latest review.
       for (const rv of reviewRows) {
-        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
+        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { id: rv.id, score: rv.score });
       }
+    }
+
+    // Per-severity counts of each latest review's OPEN (non-dismissed) findings
+    // — one IN-query over the latest review ids, bucketed by PR and tallied via
+    // the shared rollupSeverities helper. Mirrors PrMeta.findings (null until
+    // reviewed); only the latest review per PR contributes, matching the score.
+    const severityByPr = new Map<string, SeverityCounts>();
+    const prByReview = new Map<string, string>(); // latest reviewId → prId
+    for (const [prId, rev] of latestReviewByPr) prByReview.set(rev.id, prId);
+    if (prByReview.size > 0) {
+      const findingRows = await container.db
+        .select({ reviewId: t.findings.reviewId, severity: t.findings.severity })
+        .from(t.findings)
+        .where(and(inArray(t.findings.reviewId, [...prByReview.keys()]), isNull(t.findings.dismissedAt)));
+      const byPr = new Map<string, { severity: string }[]>();
+      for (const f of findingRows) {
+        const prId = prByReview.get(f.reviewId);
+        if (!prId) continue;
+        const list = byPr.get(prId);
+        if (list) list.push(f);
+        else byPr.set(prId, [f]);
+      }
+      for (const [prId, list] of byPr) severityByPr.set(prId, rollupSeverities(list));
     }
 
     // Cost of each PR's latest COMPLETED run = tokens × model price (computed
@@ -181,6 +204,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         cost_usd: latestRunCostByPr.get(r.id) ?? null,
+        findings: severityByPr.get(r.id) ?? null,
       };
     });
   });
