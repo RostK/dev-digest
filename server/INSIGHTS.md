@@ -21,6 +21,7 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 
 - 2026-06-16 — `@devdigest/shared` is vendored INDEPENDENTLY into server/src/vendor/shared/ and client/src/vendor/shared/ (one tsconfig path per app, NO sync script) — a contract change (new zod field, etc.) must be applied to BOTH copies or the apps drift. Ignore server/clones/RostK/dev-digest/** (a nested self-review checkout, not part of the build). Evidence: server/tsconfig.json paths; server/src/vendor/shared/contracts/{trace,platform}.ts.
 - 2026-06-16 — GET routes declare only `params`/`body` schemas (fastify-type-provider-zod validates INPUT, not output), so a handler's returned object is serialized as-is — surface a new computed field (e.g. cost_usd) by adding it to the returned object + the vendored zod type, no response-schema change needed. Trade-off: response/contract drift is NOT caught at the route boundary; keep the vendored contract in sync by hand. Evidence: server/src/modules/pulls/routes.ts, server/src/modules/reviews/routes.ts.
+- 2026-06-16 — For "latest row per PR" lookups use `db.selectDistinctOn([t.agentRuns.prId], {…}).where(… status='done').orderBy(t.agentRuns.prId, desc(t.agentRuns.ranAt))` — one row per PR resolved in Postgres — NOT fetch-all-rows-then-dedup-in-JS (unbounded as re-reviews accumulate). agent_runs had NO prId index; added composite (pr_id, status, ran_at) where the status equality also satisfies the (pr_id, ran_at) ordering. NB the latest-review-score lookup in the same route still uses the JS-dedup pattern (pre-existing). Evidence: server/src/modules/pulls/routes.ts (latestRunCostByPr), server/src/db/schema/runs.ts (agent_runs_pr_status_ran_at_idx).
 
 ## Decisions
 
@@ -52,6 +53,9 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
   a Provisioning key stored as `OPENROUTER_API_KEY`; the studio's test-connection gave a
   false green (it pinged the public `/models`). Fixed the test to authenticate and
   replaced the key with a real inference key. See Decisions + Recurring Errors & Fixes.
+- 2026-06-16 — Reworked the pulls-list cost query (review feedback): replaced
+  fetch-all-done-runs + JS dedup with DISTINCT ON (pr_id) + a composite
+  (pr_id, status, ran_at) index (migration 0010). See Codebase Patterns.
 - 2026-06-16 — Added per-run cost/tokens end-to-end (cost_usd on RunSummary/RunStats/PrMeta in both vendor copies; `runCostUsd` helper; surfaced in 3 GET routes). Chose compute-at-read over re-adding the dropped cost column. See Decisions + Codebase Patterns + Tool & Library Notes.
 
 ## Open Questions
