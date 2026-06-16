@@ -9,6 +9,7 @@ import {
 } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
+import { OpenRouterProvider } from '@devdigest/reviewer-core';
 import { GITHUB_PROVIDER, SECRET_KEY_BY_PROVIDER } from './constants.js';
 import { rowsToSettings } from './helpers.js';
 
@@ -89,6 +90,20 @@ export default async function settingsRoutes(appBase: FastifyInstance) {
         return { provider, ok: true, message: `Connected as @${login}` };
       }
       const llm = await container.llm(provider);
+      // OpenRouter's GET /models is PUBLIC — listModels() returns the full
+      // catalogue for ANY key (even a dead or Provisioning one), so it cannot
+      // tell a working key from a broken one. Verify against the AUTHENTICATED
+      // /key endpoint instead, so a bad key shows red. OpenAI/Anthropic gate
+      // their model lists behind auth already, so listModels() is fine there.
+      if (provider === 'openrouter' && llm instanceof OpenRouterProvider) {
+        const v = await llm.verifyKey();
+        return {
+          provider,
+          ok: v.ok,
+          message: v.ok ? 'OK — key authenticated' : v.message,
+          detail: { isProvisioning: v.isProvisioning },
+        };
+      }
       const models = await llm.listModels();
       return { provider, ok: true, message: `OK — ${models.length} models available` };
     } catch (err) {
