@@ -16,17 +16,17 @@ self-skips without Docker); everything else = hermetic unit (adapters mocked).
 
 ## Conventions
 
-- **Module** = `modules/<name>/`: `routes.ts` (Fastify plugin) → `service.ts` →
+- **Module** = `src/modules/<name>/`: `routes.ts` (Fastify plugin) → `service.ts` →
   `repository.ts` (+ `constants.ts` / `helpers.ts`). Registered **statically** in
-  `modules/index.ts` (one import + one `app.register`) — no autoload.
+  `src/modules/index.ts` (one import + one `app.register`) — no autoload.
 - **DI**: get adapters off the container (`container.git`, `await container.llm(id)`,
   `container.secrets.get(...)`). Don't `new` an adapter or import a sibling module's
-  internals. Tests inject mocks via `buildApp({ db, overrides })` (`adapters/mocks.ts`).
+  internals. Tests inject mocks via `buildApp({ db, overrides })` (`src/adapters/mocks.ts`).
 - **Validation is schema-first**: declare zod `params`/`body` in the route `schema`
   (fastify-type-provider-zod) → invalid input is 422'd before the handler runs. Don't
   hand-roll `Schema.parse(req.body)`.
 - **Errors**: throw `AppError` / `NotFoundError` / `ValidationError` / `ConfigError`
-  from `platform/errors.ts` — not raw `new Error` in handlers.
+  from `src/platform/errors.ts` — not raw `new Error` in handlers.
 - **Tenancy**: every route resolves `getContext()` → `{ workspaceId, userId }`; scope
   all queries by `workspace_id`.
 - ESM relative imports carry the `.js` extension (`./helpers.js`).
