@@ -24,10 +24,10 @@ Double trigger:
   or decision only **once it's confirmed working**, not a half-solved guess (a wrong
   entry propagates to every future session until someone corrects it).
 
-This lesson (L01) is triggered by this skill's `description` or run manually as
-`/engineering-insights`. Be honest: automatic triggering is unreliable — L06 will add a
-`Stop` hook so capture happens without a human in the loop ("if it requires a human
-trigger, it won't happen consistently enough to be useful").
+This skill is triggered by its `description` or run manually as `/engineering-insights`.
+Be honest about the limit: trigger-by-description and manual runs are unreliable — "if it
+requires a human trigger, it won't happen consistently enough to be useful". For
+guaranteed capture, wire it to a `Stop` hook so it fires at the end of every session.
 
 ## Read-first (mandatory — start of every chat)
 
