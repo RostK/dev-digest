@@ -61,6 +61,10 @@ export const RunStats = z.object({
   duration_ms: z.number().int(),
   tokens_in: z.number().int(),
   tokens_out: z.number().int(),
+  /** Cost in USD = tokens × model price. Null when the model isn't priced.
+      Computed at read-time (no extra model calls), so it isn't part of the
+      persisted trace document — the route enriches stats on the way out. */
+  cost_usd: z.number().nullish(),
   findings: z.number().int(),
   grounding: z.string(),
 });
@@ -101,6 +105,10 @@ export const RunSummary = z.object({
   duration_ms: z.number().int().nullable(),
   tokens_in: z.number().int().nullable(),
   tokens_out: z.number().int().nullable(),
+  /** Cost in USD for this run = tokens × model price; null when the model
+      isn't priced or the run hasn't completed. Derived at read-time, never
+      stored (the "keep model pricing" decision — no per-run cost column). */
+  cost_usd: z.number().nullable(),
   findings_count: z.number().int().nullable(),
   grounding: z.string().nullable(),
   ran_at: z.string().nullable(),

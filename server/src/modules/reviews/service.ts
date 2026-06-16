@@ -1,6 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
+import { runCostUsd } from '../../adapters/llm/pricing.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
@@ -174,6 +175,17 @@ export class ReviewService {
   }
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {
-    return this.repo.getRunTrace(runId);
+    const trace = await this.repo.getRunTrace(runId);
+    if (!trace) return undefined;
+    // Enrich the Stats with cost = tokens × model price (computed here, no
+    // extra model call). Read-time so it also works for traces persisted
+    // before cost was surfaced — the document itself stays unchanged.
+    return {
+      ...trace,
+      stats: {
+        ...trace.stats,
+        cost_usd: runCostUsd(trace.config.model, trace.stats.tokens_in, trace.stats.tokens_out),
+      },
+    };
   }
 }
