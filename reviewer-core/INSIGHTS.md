@@ -22,6 +22,16 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 
 ## Tool & Library Notes
 
+- 2026-06-16 — OpenRouter's `GET /api/v1/models` is PUBLIC: it returns the full model
+  catalogue for ANY (even bogus/empty) key, so `listModels()` can NOT validate a key. To
+  test a key, hit the authenticated `GET /api/v1/key` (see `verifyKey()`). Evidence:
+  reviewer-core/src/llm/openrouter.ts (`listModels` vs `verifyKey`).
+- 2026-06-16 — OpenRouter Provisioning keys (`GET /api/v1/key` → `is_provisioning_key:
+  true`) manage other keys but CANNOT run inference → they 401 "User not found" on
+  `/chat/completions`. Inference keys are `sk-or-v1-` + 64 hex (~73 chars); a ~181-char
+  base64url token is a Provisioning key. Evidence: reviewer-core/src/llm/openrouter.ts
+  (`verifyKey`).
+
 ## Recurring Errors & Fixes
 
 ## Session Notes
