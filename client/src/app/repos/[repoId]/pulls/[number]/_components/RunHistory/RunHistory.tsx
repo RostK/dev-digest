@@ -4,6 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
 import type { RunSummary, PrCommit } from "@devdigest/shared";
+import { formatTokensTotal, formatCostPrecise } from "@/components/RunCostBadge";
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -149,6 +150,13 @@ export function RunHistory({
         const r = item.run;
         const o = outcomeOf(r);
         const settled = r.status === "done";
+        // Usage line ("9,119 tok · $0.0013") under the timestamp — only for
+        // completed runs that actually have token/cost data.
+        const usage = settled
+          ? [formatTokensTotal(r.tokens_in, r.tokens_out), formatCostPrecise(r.cost_usd)]
+              .filter(Boolean)
+              .join(" · ")
+          : "";
         return (
           <div key={`run:${r.run_id}`} style={rowStyle}>
             <Badge color={o.color} bg={o.bg} icon={o.icon}>
@@ -197,6 +205,11 @@ export function RunHistory({
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}
+              {usage && (
+                <span className="mono" style={{ color: "var(--text-secondary)" }}>
+                  {usage}
+                </span>
+              )}
             </div>
             <button
               type="button"

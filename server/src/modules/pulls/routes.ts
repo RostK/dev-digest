@@ -7,6 +7,7 @@ import * as t from '../../db/schema.js';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
+import { runCostUsd } from '../../adapters/llm/pricing.js';
 import { deriveReviewStatus } from './status.js';
 
 /**
@@ -129,6 +130,32 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // Cost of each PR's latest COMPLETED run = tokens × model price (computed
+    // here, no extra model call). DISTINCT ON (pr_id) returns exactly ONE row
+    // per PR — its latest 'done' run — resolved in Postgres instead of fetching
+    // every run and discarding all but the first. Backed by the
+    // (pr_id, status, ran_at) index on agent_runs. Unreviewed PRs get null.
+    const latestRunCostByPr = new Map<string, number | null>();
+    if (prIds.length > 0) {
+      const runRows = await container.db
+        .selectDistinctOn([t.agentRuns.prId], {
+          prId: t.agentRuns.prId,
+          model: t.agentRuns.model,
+          tokensIn: t.agentRuns.tokensIn,
+          tokensOut: t.agentRuns.tokensOut,
+        })
+        .from(t.agentRuns)
+        .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')))
+        // DISTINCT ON requires the leading ORDER BY to match the distinct key;
+        // ran_at DESC then picks the latest run within each pr_id group.
+        .orderBy(t.agentRuns.prId, desc(t.agentRuns.ranAt));
+      for (const rr of runRows) {
+        if (rr.prId) {
+          latestRunCostByPr.set(rr.prId, runCostUsd(rr.model, rr.tokensIn, rr.tokensOut));
+        }
+      }
+    }
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -153,6 +180,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: latestRunCostByPr.get(r.id) ?? null,
       };
     });
   });

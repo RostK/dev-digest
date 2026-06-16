@@ -7,7 +7,8 @@
 
 import React from "react";
 import { Icon, Badge } from "@devdigest/ui";
-import type { ReviewRecord, Verdict } from "@devdigest/shared";
+import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
+import { RunCostBadge } from "@/components/RunCostBadge";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
@@ -25,6 +26,7 @@ function formatWhen(iso: string): string {
 
 export function ReviewRunAccordion({
   review,
+  run = null,
   prId,
   defaultOpen = false,
   repoFullName,
@@ -33,6 +35,9 @@ export function ReviewRunAccordion({
   targetNonce = 0,
 }: {
   review: ReviewRecord;
+  /** The agent_run behind this review (matched by run_id) — carries cost +
+   *  tokens, which the review record itself doesn't. Null when not found. */
+  run?: RunSummary | null;
   prId: string;
   defaultOpen?: boolean;
   repoFullName?: string | null;
@@ -103,6 +108,7 @@ export function ReviewRunAccordion({
             {review.score}
           </Badge>
         )}
+        {run?.cost_usd != null && <RunCostBadge costUsd={run.cost_usd} variant="compact" />}
         <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {formatWhen(review.created_at)}
         </span>
@@ -144,6 +150,9 @@ export function ReviewRunAccordion({
                 findingsCount={findings.length}
                 blockers={blockers}
                 agentName={review.agent_name}
+                costUsd={run?.cost_usd ?? null}
+                tokensIn={run?.tokens_in ?? null}
+                tokensOut={run?.tokens_out ?? null}
               />
             </div>
           )}

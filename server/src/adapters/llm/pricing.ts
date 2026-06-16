@@ -39,3 +39,17 @@ export function estimateCost(model: string, tokensIn: number, tokensOut: number)
   if (!p) return null;
   return (tokensIn * p.in + tokensOut * p.out) / 1_000_000;
 }
+
+/**
+ * Null-tolerant wrapper around {@link estimateCost} for surfacing per-run cost
+ * in GET routes. Returns null (→ rendered as "—", never "$0.00") when the model
+ * is unknown/unpriced or the token counts are missing — e.g. a failed run.
+ */
+export function runCostUsd(
+  model: string | null | undefined,
+  tokensIn: number | null | undefined,
+  tokensOut: number | null | undefined,
+): number | null {
+  if (!model || tokensIn == null || tokensOut == null) return null;
+  return estimateCost(model, tokensIn, tokensOut);
+}
