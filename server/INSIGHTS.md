@@ -34,6 +34,7 @@ Record format: `- YYYY-MM-DD — <actionable statement>. Evidence: path/file.ts:
 ## Tool & Library Notes
 
 - 2026-06-16 — `cd server && pnpm test` reports 6 PRE-EXISTING failures in test/indexer-pipeline.test.ts (`ENOENT … repo-intel-inc-*/src/a.ts` from its own `writeFileAt` temp-dir helper) — a Windows FS flake that reproduces in isolation AND on a clean `git stash` tree, i.e. baseline noise unrelated to feature work. To validate non-indexer changes, run targeted suites instead, e.g. `pnpm vitest run test/contracts.test.ts test/pulls-status.test.ts test/reviews-helpers.test.ts`. Evidence: test/indexer-pipeline.test.ts:144.
+- 2026-06-16 (correction to the above) — NOT a flake: it's a deterministic Windows path-separator bug in `writeFileAt`. It derived the parent dir via `full.lastIndexOf('/')`, but `join()` yields backslash separators on Windows, so the search never matched, the `mkdir` was skipped, and `writeFile` failed for any subdir fixture (e.g. `src/a.ts`). Fixed by using `dirname()` (PR #3). Lesson: derive a path's parent with `dirname()` (node:path), never a hardcoded `/` search — dev/CI run on Windows too. Evidence: test/indexer-pipeline.test.ts:140 (writeFileAt).
 
 ## Recurring Errors & Fixes
 
