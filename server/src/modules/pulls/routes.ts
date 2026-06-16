@@ -112,43 +112,41 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE + per-severity FINDINGS breakdown per PR for the
-    // list's score ring and findings indicators. Computed on read from
-    // reviews/findings (no FK denorm); the list is small, so a couple of
-    // IN-queries + JS grouping is cheap.
+    // Latest-review SCORE per PR for the list's score ring. Computed on read
+    // from reviews (no FK denorm); the list is small, so one IN-query + JS
+    // grouping is cheap.
     const prIds = rows.map((r) => r.id);
-    const latestReviewByPr = new Map<string, { id: string; score: number | null }>();
+    const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
       const reviewRows = await container.db
-        .select({ id: t.reviews.id, prId: t.reviews.prId, score: t.reviews.score })
+        .select({ prId: t.reviews.prId, score: t.reviews.score })
         .from(t.reviews)
         .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
         .orderBy(desc(t.reviews.createdAt));
       // Rows are newest-first → first seen per PR is the latest review.
       for (const rv of reviewRows) {
-        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { id: rv.id, score: rv.score });
+        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
       }
     }
 
-    // Per-severity counts of each latest review's OPEN (non-dismissed) findings
-    // — one IN-query over the latest review ids, bucketed by PR and tallied via
-    // the shared rollupSeverities helper. Mirrors PrMeta.findings (null until
-    // reviewed); only the latest review per PR contributes, matching the score.
+    // Per-severity counts of each PR's OPEN (non-dismissed) findings, summed
+    // across ALL its reviews — matches the PR-detail page, which flatMaps
+    // findings over every review. A multi-agent pass produces one review row per
+    // agent, so scoping to the single latest review would drop the other agents'
+    // findings. One IN-query joining findings→reviews, bucketed by PR via the
+    // shared rollupSeverities helper.
     const severityByPr = new Map<string, SeverityCounts>();
-    const prByReview = new Map<string, string>(); // latest reviewId → prId
-    for (const [prId, rev] of latestReviewByPr) prByReview.set(rev.id, prId);
-    if (prByReview.size > 0) {
+    if (prIds.length > 0) {
       const findingRows = await container.db
-        .select({ reviewId: t.findings.reviewId, severity: t.findings.severity })
+        .select({ prId: t.reviews.prId, severity: t.findings.severity })
         .from(t.findings)
-        .where(and(inArray(t.findings.reviewId, [...prByReview.keys()]), isNull(t.findings.dismissedAt)));
+        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+        .where(and(inArray(t.reviews.prId, prIds), isNull(t.findings.dismissedAt)));
       const byPr = new Map<string, { severity: string }[]>();
       for (const f of findingRows) {
-        const prId = prByReview.get(f.reviewId);
-        if (!prId) continue;
-        const list = byPr.get(prId);
+        const list = byPr.get(f.prId);
         if (list) list.push(f);
-        else byPr.set(prId, [f]);
+        else byPr.set(f.prId, [f]);
       }
       for (const [prId, list] of byPr) severityByPr.set(prId, rollupSeverities(list));
     }

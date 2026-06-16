@@ -31,10 +31,12 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   // count chips themselves come from `pr.findings` (already on the list payload).
   const [findingsOpen, setFindingsOpen] = React.useState(false);
   const reviewsQ = usePrReviews(pr.id ?? null, { enabled: findingsOpen && !!pr.id });
-  // Match the server: the list counts come from the latest `review`-kind run's
-  // open findings, so list the same set in the card.
-  const latestReview = reviewsQ.data?.find((r) => r.kind === "review");
-  const hoverFindings = latestReview ? openFindings(latestReview.findings) : undefined;
+  // The hover card lists the SAME findings the cluster counts: all open findings
+  // across every review (matches the server-side count + the PR-detail page,
+  // which flatMaps findings over all reviews — a multi-agent pass has several).
+  const hoverFindings = reviewsQ.data
+    ? openFindings(reviewsQ.data.flatMap((r) => r.findings))
+    : undefined;
   return (
     <div
       onMouseEnter={() => setH(true)}
