@@ -14,7 +14,8 @@
   "findingsCard": {
     "hoverTitle": "{count} findings",
     "hoverTitleRun": "{count} findings in this run",
-    "none": "No open findings"
+    "none": "No open findings",
+    "more": "+{count} more"
   },
   "trifecta": {
     "lethal": "LETHAL TRIFECTA — ALL 3 PRESENT",

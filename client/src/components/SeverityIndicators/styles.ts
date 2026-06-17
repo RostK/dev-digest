@@ -67,4 +67,11 @@ export const s = {
     gap: 10,
   } satisfies CSSProperties,
   cardItemLoc: { fontSize: 11, color: "var(--text-muted)" } satisfies CSSProperties,
+  cardMore: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTop: "1px solid var(--border)",
+    fontSize: 12,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
 } as const;

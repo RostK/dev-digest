@@ -80,6 +80,7 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
             findings={hoverFindings}
             loading={reviewsQ.isLoading}
             emptyLabel={t("findingsCard.none")}
+            moreLabel={(count) => t("findingsCard.more", { count })}
             onOpen={() => setFindingsOpen(true)}
           >
             <SeverityIndicators counts={pr.findings} />

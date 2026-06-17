@@ -219,6 +219,7 @@ export function RunHistory({
                           title={t("findingsCard.hoverTitleRun", { count: open.length })}
                           findings={open}
                           emptyLabel={t("findingsCard.none")}
+                          moreLabel={(count) => t("findingsCard.more", { count })}
                         >
                           <SeverityIndicators counts={countsOf(open)} />
                         </FindingsHoverCard>
