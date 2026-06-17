@@ -12,6 +12,14 @@ export const s = {
     display: "inline-flex",
     alignItems: "center",
   } satisfies CSSProperties,
+  // Clickable severity chip (filter toggle). The active chip gets an accent ring
+  // (boxShadow, so it doesn't shift layout); the rest dim while a filter is on.
+  chipClickable: { cursor: "pointer", borderRadius: 6 } satisfies CSSProperties,
+  chipActive: {
+    borderRadius: 6,
+    boxShadow: "0 0 0 1.5px var(--accent)",
+  } satisfies CSSProperties,
+  chipDimmed: { opacity: 0.4 } satisfies CSSProperties,
   // Fixed + portaled to document.body so the PR-list table's `overflow: hidden`
   // can't clip it; the call site supplies top/left from the trigger's rect.
   card: {

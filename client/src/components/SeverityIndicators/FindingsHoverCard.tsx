@@ -29,6 +29,8 @@ export function FindingsHoverCard({
   onOpen,
   max = 5,
   moreLabel,
+  pinned = false,
+  onRequestClose,
   children,
 }: {
   /** Card header, e.g. "6 findings" / "2 findings in this run" (i18n'd upstream). */
@@ -43,6 +45,11 @@ export function FindingsHoverCard({
   max?: number;
   /** Footer text for the `N` hidden findings, e.g. `(n) => "+3 more"` (i18n'd upstream). */
   moreLabel?: (count: number) => string;
+  /** When true the card stays open regardless of hover (e.g. a click-filter is
+   *  active); an outside click then requests close via `onRequestClose`. */
+  pinned?: boolean;
+  /** Called on an outside click while pinned — the caller should clear the pin. */
+  onRequestClose?: () => void;
   children: React.ReactNode;
 }) {
   const triggerRef = React.useRef<HTMLSpanElement>(null);
@@ -93,19 +100,24 @@ export function FindingsHoverCard({
   };
 
   // Small grace period so moving the pointer from the trigger across the gap to
-  // the (portaled) card doesn't dismiss it.
+  // the (portaled) card doesn't dismiss it. While pinned the card never closes
+  // on hover-out — only an outside click (below) dismisses it.
   const scheduleClose = () => {
+    if (pinned) return;
     clearClose();
     closeTimer.current = setTimeout(() => setOpen(false), 120);
   };
 
   React.useEffect(() => clearClose, []);
 
+  // The card is shown while hovered OR pinned (a click-filter keeps it up).
+  const show = open || pinned;
+
   // Position once the card has mounted (so we can measure it) and re-position
   // whenever its content size changes (lazy load) or the page scrolls/resizes.
   // Runs before paint, so there's no flash at the pre-measured position.
   React.useLayoutEffect(() => {
-    if (!open) return;
+    if (!show) return;
     place();
     const onMove = () => place();
     window.addEventListener("scroll", onMove, true);
@@ -114,7 +126,21 @@ export function FindingsHoverCard({
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
     };
-  }, [open, loading, findings?.length, place]);
+  }, [show, loading, findings?.length, place]);
+
+  // While pinned, a click outside the trigger + card dismisses it (and clears
+  // the pin via onRequestClose). Clicks on the chips/card are handled inline.
+  React.useEffect(() => {
+    if (!pinned) return;
+    const onDown = (e: MouseEvent) => {
+      const tgt = e.target as Node;
+      if (triggerRef.current?.contains(tgt) || cardRef.current?.contains(tgt)) return;
+      setOpen(false);
+      onRequestClose?.();
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [pinned, onRequestClose]);
 
   const shown = findings ? findings.slice(0, max) : undefined;
   const hidden = findings ? findings.length - (shown?.length ?? 0) : 0;
@@ -127,7 +153,7 @@ export function FindingsHoverCard({
       onMouseLeave={scheduleClose}
     >
       {children}
-      {open &&
+      {show &&
         typeof document !== "undefined" &&
         createPortal(
           <div

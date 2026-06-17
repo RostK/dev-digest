@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { SeverityIndicators } from "./SeverityIndicators";
 
 afterEach(cleanup);
@@ -30,5 +30,33 @@ describe("SeverityIndicators", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
     rerender(<SeverityIndicators counts={undefined} />);
     expect(screen.getByText("—")).toBeInTheDocument();
+  });
+
+  it("makes chips clickable buttons that call onSelect with the severity", () => {
+    const onSelect = vi.fn();
+    render(
+      <SeverityIndicators counts={{ critical: 2, warning: 1, suggestion: 0 }} onSelect={onSelect} />,
+    );
+    const crit = screen.getByTitle("2 Critical");
+    expect(crit).toHaveAttribute("role", "button");
+    fireEvent.click(crit);
+    expect(onSelect).toHaveBeenCalledWith("CRITICAL");
+  });
+
+  it("marks the active chip pressed (and leaves it un-pressed otherwise)", () => {
+    render(
+      <SeverityIndicators
+        counts={{ critical: 2, warning: 1, suggestion: 0 }}
+        active="CRITICAL"
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByTitle("2 Critical")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTitle("1 Warning")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("is not interactive without onSelect (no button role)", () => {
+    render(<SeverityIndicators counts={{ critical: 1, warning: 0, suggestion: 0 }} />);
+    expect(screen.getByTitle("1 Critical")).not.toHaveAttribute("role");
   });
 });

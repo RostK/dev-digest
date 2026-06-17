@@ -7,7 +7,7 @@
 "use client";
 
 import React from "react";
-import { SeverityBadge, SEV } from "@devdigest/ui";
+import { SeverityBadge, SEV, type Severity } from "@devdigest/ui";
 import { type SeverityCounts, totalOf } from "./helpers";
 import { s } from "./styles";
 
@@ -20,8 +20,14 @@ const ORDER = [
 
 export function SeverityIndicators({
   counts,
+  active,
+  onSelect,
 }: {
   counts: SeverityCounts | null | undefined;
+  /** Currently-filtered severity (highlighted); others dim. */
+  active?: Severity | null;
+  /** When set, each chip becomes a button that toggles its severity filter. */
+  onSelect?: (sev: Severity) => void;
 }) {
   if (!counts || totalOf(counts) === 0) {
     return <span style={s.empty}>—</span>;
@@ -32,8 +38,41 @@ export function SeverityIndicators({
         // Compact badges are icon+number only; the wrapper supplies an
         // accessible name ("2 Critical") for screen readers + a hover title.
         const label = `${counts[key]} ${SEV[sev].label}`;
+        const isActive = active === sev;
+        const dimmed = active != null && !isActive;
         return (
-          <span key={sev} title={label} aria-label={label} style={s.trigger}>
+          <span
+            key={sev}
+            title={label}
+            aria-label={label}
+            role={onSelect ? "button" : undefined}
+            tabIndex={onSelect ? 0 : undefined}
+            aria-pressed={onSelect ? isActive : undefined}
+            onClick={
+              onSelect
+                ? (e) => {
+                    e.stopPropagation(); // don't trigger the row's navigation
+                    onSelect(sev);
+                  }
+                : undefined
+            }
+            onKeyDown={
+              onSelect
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(sev);
+                    }
+                  }
+                : undefined
+            }
+            style={{
+              ...s.trigger,
+              ...(onSelect ? s.chipClickable : null),
+              ...(isActive ? s.chipActive : null),
+              ...(dimmed ? s.chipDimmed : null),
+            }}
+          >
             <SeverityBadge severity={sev} count={counts[key]} compact />
           </span>
         );

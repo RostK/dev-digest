@@ -7,8 +7,7 @@ import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/RunCostBadge";
 import {
-  SeverityIndicators,
-  FindingsHoverCard,
+  FindingsCluster,
   openFindings,
   latestReviewsPerAgent,
   totalOf,
@@ -77,16 +76,15 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
       </div>
       <div style={s.findingsCell} onClick={(e) => e.stopPropagation()}>
         {pr.findings ? (
-          <FindingsHoverCard
-            title={t("findingsCard.hoverTitle", { count: totalOf(pr.findings) })}
+          <FindingsCluster
+            counts={pr.findings}
             findings={hoverFindings}
             loading={reviewsQ.isLoading}
+            titleAll={t("findingsCard.hoverTitle", { count: totalOf(pr.findings) })}
             emptyLabel={t("findingsCard.none")}
             moreLabel={(count) => t("findingsCard.more", { count })}
             onOpen={() => setFindingsOpen(true)}
-          >
-            <SeverityIndicators counts={pr.findings} />
-          </FindingsHoverCard>
+          />
         ) : (
           <span style={s.muted}>—</span>
         )}

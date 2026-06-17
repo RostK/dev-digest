@@ -6,8 +6,7 @@ import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
 import type { RunSummary, PrCommit, FindingRecord } from "@devdigest/shared";
 import { formatTokensTotal, formatCostPrecise } from "@/components/RunCostBadge";
 import {
-  SeverityIndicators,
-  FindingsHoverCard,
+  FindingsCluster,
   countsOf,
   openFindings,
 } from "@/components/SeverityIndicators";
@@ -215,14 +214,13 @@ export function RunHistory({
                   if (open.length > 0) {
                     return (
                       <div style={{ display: "flex", alignItems: "center", fontSize: 12, color: "var(--text-muted)" }}>
-                        <FindingsHoverCard
-                          title={t("findingsCard.hoverTitleRun", { count: open.length })}
+                        <FindingsCluster
+                          counts={countsOf(open)}
                           findings={open}
+                          titleAll={t("findingsCard.hoverTitleRun", { count: open.length })}
                           emptyLabel={t("findingsCard.none")}
                           moreLabel={(count) => t("findingsCard.more", { count })}
-                        >
-                          <SeverityIndicators counts={countsOf(open)} />
-                        </FindingsHoverCard>
+                        />
                         {(r.blockers ?? 0) > 0 ? (
                           <span style={{ marginLeft: 2 }}>{t("runStatus.blockers", { count: r.blockers ?? 0 })}</span>
                         ) : null}
