@@ -129,25 +129,38 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Per-severity counts of each PR's OPEN (non-dismissed) findings, summed
-    // across ALL its reviews — matches the PR-detail page, which flatMaps
-    // findings over every review. A multi-agent pass produces one review row per
-    // agent, so scoping to the single latest review would drop the other agents'
-    // findings. The count is aggregated in SQL (GROUP BY pr_id, severity) so a
-    // noisy PR ships ≤3 rows instead of one per finding; backed by the findings
+    // Per-severity counts of each PR's OPEN (non-dismissed) findings, counted
+    // only from each agent's LATEST review — so the insights track the current
+    // code: a re-review supersedes that agent's earlier pass, dropping findings
+    // from code that has since changed. A multi-agent pass writes one review row
+    // per agent (distinct agent_id), so we keep the newest per (pr_id, agent_id)
+    // — NOT just the single latest review, which would drop the other agents'
+    // findings. DISTINCT ON resolves the winning reviews in Postgres; the count
+    // is then aggregated via GROUP BY (≤3 rows/PR). Backed by the findings
     // (review_id, dismissed_at) index. Bucketed by PR via rollupSeverityCounts.
     const severityByPr = new Map<string, SeverityCounts>();
     if (prIds.length > 0) {
+      const latestPerAgent = container.db
+        .selectDistinctOn([t.reviews.prId, t.reviews.agentId], {
+          id: t.reviews.id,
+          prId: t.reviews.prId,
+        })
+        .from(t.reviews)
+        .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
+        // DISTINCT ON keys (pr_id, agent_id) must lead the ORDER BY; created_at
+        // DESC then picks the latest review within each (pr, agent) group.
+        .orderBy(t.reviews.prId, t.reviews.agentId, desc(t.reviews.createdAt))
+        .as('latest_per_agent');
       const severityRows = await container.db
         .select({
-          prId: t.reviews.prId,
+          prId: latestPerAgent.prId,
           severity: t.findings.severity,
           count: count(t.findings.id),
         })
         .from(t.findings)
-        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
-        .where(and(inArray(t.reviews.prId, prIds), isNull(t.findings.dismissedAt)))
-        .groupBy(t.reviews.prId, t.findings.severity);
+        .innerJoin(latestPerAgent, eq(t.findings.reviewId, latestPerAgent.id))
+        .where(isNull(t.findings.dismissedAt))
+        .groupBy(latestPerAgent.prId, t.findings.severity);
       const byPr = new Map<string, { severity: string; count: number }[]>();
       for (const row of severityRows) {
         const list = byPr.get(row.prId);

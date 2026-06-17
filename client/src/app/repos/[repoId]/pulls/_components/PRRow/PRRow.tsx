@@ -10,6 +10,7 @@ import {
   SeverityIndicators,
   FindingsHoverCard,
   openFindings,
+  latestReviewsPerAgent,
   totalOf,
 } from "@/components/SeverityIndicators";
 import { usePrReviews } from "@/lib/hooks/reviews";
@@ -31,11 +32,12 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   // count chips themselves come from `pr.findings` (already on the list payload).
   const [findingsOpen, setFindingsOpen] = React.useState(false);
   const reviewsQ = usePrReviews(pr.id ?? null, { enabled: findingsOpen && !!pr.id });
-  // The hover card lists the SAME findings the cluster counts: all open findings
-  // across every review (matches the server-side count + the PR-detail page,
-  // which flatMaps findings over all reviews — a multi-agent pass has several).
+  // The hover card lists the SAME findings the cluster counts: open findings
+  // from each agent's LATEST review only (matches the server-side count, which
+  // does DISTINCT ON (pr_id, agent_id)). Counting every review would re-include
+  // findings from superseded passes against older code.
   const hoverFindings = reviewsQ.data
-    ? openFindings(reviewsQ.data.flatMap((r) => r.findings))
+    ? openFindings(latestReviewsPerAgent(reviewsQ.data).flatMap((r) => r.findings))
     : undefined;
   return (
     <div
