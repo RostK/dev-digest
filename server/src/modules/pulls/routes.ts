@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
@@ -8,7 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { runCostUsd } from '../../adapters/llm/pricing.js';
-import { deriveReviewStatus, rollupSeverities, type SeverityCounts } from './status.js';
+import { deriveReviewStatus, rollupSeverityCounts, type SeverityCounts } from './status.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -133,22 +133,28 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
     // across ALL its reviews — matches the PR-detail page, which flatMaps
     // findings over every review. A multi-agent pass produces one review row per
     // agent, so scoping to the single latest review would drop the other agents'
-    // findings. One IN-query joining findings→reviews, bucketed by PR via the
-    // shared rollupSeverities helper.
+    // findings. The count is aggregated in SQL (GROUP BY pr_id, severity) so a
+    // noisy PR ships ≤3 rows instead of one per finding; backed by the findings
+    // (review_id, dismissed_at) index. Bucketed by PR via rollupSeverityCounts.
     const severityByPr = new Map<string, SeverityCounts>();
     if (prIds.length > 0) {
-      const findingRows = await container.db
-        .select({ prId: t.reviews.prId, severity: t.findings.severity })
+      const severityRows = await container.db
+        .select({
+          prId: t.reviews.prId,
+          severity: t.findings.severity,
+          count: count(t.findings.id),
+        })
         .from(t.findings)
         .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
-        .where(and(inArray(t.reviews.prId, prIds), isNull(t.findings.dismissedAt)));
-      const byPr = new Map<string, { severity: string }[]>();
-      for (const f of findingRows) {
-        const list = byPr.get(f.prId);
-        if (list) list.push(f);
-        else byPr.set(f.prId, [f]);
+        .where(and(inArray(t.reviews.prId, prIds), isNull(t.findings.dismissedAt)))
+        .groupBy(t.reviews.prId, t.findings.severity);
+      const byPr = new Map<string, { severity: string; count: number }[]>();
+      for (const row of severityRows) {
+        const list = byPr.get(row.prId);
+        if (list) list.push(row);
+        else byPr.set(row.prId, [row]);
       }
-      for (const [prId, list] of byPr) severityByPr.set(prId, rollupSeverities(list));
+      for (const [prId, list] of byPr) severityByPr.set(prId, rollupSeverityCounts(list));
     }
 
     // Cost of each PR's latest COMPLETED run = tokens × model price (computed

@@ -6,7 +6,7 @@
  * + age, so it gets unit coverage independent of the route's queries.
  */
 import { describe, it, expect } from 'vitest';
-import { deriveReviewStatus, rollupSeverities, STALE_DAYS } from '../src/modules/pulls/status.js';
+import { deriveReviewStatus, rollupSeverities, rollupSeverityCounts, STALE_DAYS } from '../src/modules/pulls/status.js';
 
 const DAY = 86_400_000;
 const now = Date.UTC(2026, 5, 11);
@@ -64,5 +64,37 @@ describe('rollupSeverities', () => {
 
   it('is all-zero for no findings', () => {
     expect(rollupSeverities([])).toEqual({ critical: 0, warning: 0, suggestion: 0 });
+  });
+});
+
+describe('rollupSeverityCounts', () => {
+  it('sums pre-aggregated (severity, count) buckets (ignores unknown)', () => {
+    expect(
+      rollupSeverityCounts([
+        { severity: 'CRITICAL', count: 2 },
+        { severity: 'WARNING', count: 1 },
+        { severity: 'SUGGESTION', count: 3 },
+        { severity: 'WEIRD', count: 9 },
+      ]),
+    ).toEqual({ critical: 2, warning: 1, suggestion: 3 });
+  });
+
+  it('matches rollupSeverities for the same findings (GROUP BY ≡ flat count)', () => {
+    const flat = [
+      { severity: 'CRITICAL' },
+      { severity: 'CRITICAL' },
+      { severity: 'WARNING' },
+      { severity: 'SUGGESTION' },
+    ];
+    const grouped = [
+      { severity: 'CRITICAL', count: 2 },
+      { severity: 'WARNING', count: 1 },
+      { severity: 'SUGGESTION', count: 1 },
+    ];
+    expect(rollupSeverityCounts(grouped)).toEqual(rollupSeverities(flat));
+  });
+
+  it('is all-zero for no rows', () => {
+    expect(rollupSeverityCounts([])).toEqual({ critical: 0, warning: 0, suggestion: 0 });
   });
 });
