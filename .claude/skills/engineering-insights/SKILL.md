@@ -53,7 +53,7 @@ Write to the `INSIGHTS.md` of the **deepest module that owns the changed files**
 | `reviewer-core/**` | `reviewer-core/INSIGHTS.md` |
 | `server/src/modules/repo-intel/**` | `server/src/modules/repo-intel/INSIGHTS.md` |
 | anything else under `server/**` (other modules, `vendor/shared`, `db`, …) | `server/INSIGHTS.md` |
-| `e2e/**` | fold into the package it tests (usually `server/INSIGHTS.md`) |
+| `e2e/**` | `e2e/INSIGHTS.md` |
 
 A session that touched several modules appends to **each** relevant file. If a target
 file is missing, create it from the section skeleton below.
