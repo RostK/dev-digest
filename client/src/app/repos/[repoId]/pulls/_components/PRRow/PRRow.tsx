@@ -6,6 +6,13 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import { RunCostBadge } from "@/components/RunCostBadge";
+import {
+  FindingsCluster,
+  openFindings,
+  latestReviewsPerAgent,
+  totalOf,
+} from "@/components/SeverityIndicators";
+import { usePrReviews } from "@/lib/hooks/reviews";
 import type { PrMeta } from "@/lib/types";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
@@ -18,6 +25,19 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+
+  // Findings list for the hover card is fetched lazily — only once the row's
+  // cluster is hovered — and shares the PR-detail `["reviews", prId]` cache. The
+  // count chips themselves come from `pr.findings` (already on the list payload).
+  const [findingsOpen, setFindingsOpen] = React.useState(false);
+  const reviewsQ = usePrReviews(pr.id ?? null, { enabled: findingsOpen && !!pr.id });
+  // The hover card lists the SAME findings the cluster counts: open findings
+  // from each agent's LATEST review only (matches the server-side count, which
+  // does DISTINCT ON (pr_id, agent_id)). Counting every review would re-include
+  // findings from superseded passes against older code.
+  const hoverFindings = reviewsQ.data
+    ? openFindings(latestReviewsPerAgent(reviewsQ.data).flatMap((r) => r.findings))
+    : undefined;
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -50,6 +70,21 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
       <div style={s.scoreCell}>
         {reviewed ? (
           <CircularScore score={pr.score!} size={34} stroke={3} />
+        ) : (
+          <span style={s.muted}>—</span>
+        )}
+      </div>
+      <div style={s.findingsCell} onClick={(e) => e.stopPropagation()}>
+        {pr.findings ? (
+          <FindingsCluster
+            counts={pr.findings}
+            findings={hoverFindings}
+            loading={reviewsQ.isLoading}
+            titleAll={t("findingsCard.hoverTitle", { count: totalOf(pr.findings) })}
+            emptyLabel={t("findingsCard.none")}
+            moreLabel={(count) => t("findingsCard.more", { count })}
+            onOpen={() => setFindingsOpen(true)}
+          />
         ) : (
           <span style={s.muted}>—</span>
         )}

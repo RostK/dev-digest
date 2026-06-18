@@ -19,13 +19,33 @@ export interface SeverityCounts {
   suggestion: number;
 }
 
+/** Maps a raw finding severity to its list bucket; anything else is ignored. */
+const SEVERITY_BUCKET: Record<string, keyof SeverityCounts> = {
+  CRITICAL: 'critical',
+  WARNING: 'warning',
+  SUGGESTION: 'suggestion',
+};
+
 /** Tally finding severities (CRITICAL / WARNING / SUGGESTION) for one review. */
 export function rollupSeverities(rows: { severity: string }[]): SeverityCounts {
   const c: SeverityCounts = { critical: 0, warning: 0, suggestion: 0 };
   for (const r of rows) {
-    if (r.severity === 'CRITICAL') c.critical += 1;
-    else if (r.severity === 'WARNING') c.warning += 1;
-    else if (r.severity === 'SUGGESTION') c.suggestion += 1;
+    const bucket = SEVERITY_BUCKET[r.severity];
+    if (bucket) c[bucket] += 1;
+  }
+  return c;
+}
+
+/**
+ * Same buckets as {@link rollupSeverities}, but from pre-aggregated rows — one
+ * `{ severity, count }` per bucket (a SQL `GROUP BY pr_id, severity`) instead of
+ * one row per finding. Lets the PR-list query ship ≤3 rows per PR rather than N.
+ */
+export function rollupSeverityCounts(rows: { severity: string; count: number }[]): SeverityCounts {
+  const c: SeverityCounts = { critical: 0, warning: 0, suggestion: 0 };
+  for (const r of rows) {
+    const bucket = SEVERITY_BUCKET[r.severity];
+    if (bucket) c[bucket] += r.count;
   }
   return c;
 }

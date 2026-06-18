@@ -21,6 +21,7 @@ import { usePrReviews, useCancelRun, usePrActiveRuns, usePrRuns, useDeleteRun } 
 import { useActiveRepo, useRepoNotFound } from "../../../../../lib/repo-context";
 import { ApiError } from "../../../../../lib/api";
 import { githubPrUrl } from "../../../../../lib/github-urls";
+import { latestReviewsPerAgent } from "@/components/SeverityIndicators";
 import type { FindingRecord } from "@devdigest/shared";
 
 export default function PRDetailPage() {
@@ -69,8 +70,12 @@ export default function PRDetailPage() {
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
   const runs = reviews ?? [];
+  // Aggregate counts (findings badge + trifecta) reflect only each agent's
+  // LATEST review — matching the PR-list cluster, which the server computes via
+  // DISTINCT ON (pr_id, agent_id). The `runs` timeline below still shows every
+  // run (it's a history); only the rollup drops superseded passes.
   const allFindings: FindingRecord[] = React.useMemo(
-    () => runs.flatMap((r) => r.findings),
+    () => latestReviewsPerAgent(runs).flatMap((r) => r.findings),
     [reviews],
   );
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");

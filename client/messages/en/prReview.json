@@ -11,6 +11,12 @@
     "sendReply": "Send reply",
     "cancel": "Cancel"
   },
+  "findingsCard": {
+    "hoverTitle": "{count} findings",
+    "hoverTitleRun": "{count} findings in this run",
+    "none": "No open findings",
+    "more": "+{count} more"
+  },
   "trifecta": {
     "lethal": "LETHAL TRIFECTA — ALL 3 PRESENT",
     "components": "TRIFECTA COMPONENTS",
@@ -91,6 +97,7 @@
       "author": "Author",
       "size": "Size",
       "score": "Score",
+      "findings": "Findings",
       "cost": "Cost",
       "status": "Status",
       "updated": "Updated"

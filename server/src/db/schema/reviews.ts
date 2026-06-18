@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision, index } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -43,7 +43,16 @@ export const findings = pgTable('findings', {
   trifectaComponents: jsonb('trifecta_components').$type<string[]>(),
   acceptedAt: timestamp('accepted_at', { withTimezone: true }),
   dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
-});
+}, (t) => ({
+  // Supports the pulls-list per-PR severity rollup, which joins findings→reviews
+  // on review_id and filters dismissed_at IS NULL (findings INNER JOIN reviews …
+  // WHERE reviews.pr_id IN (…) AND findings.dismissed_at IS NULL). review_id is
+  // an FK but Postgres does NOT auto-index the referencing column, so without
+  // this the join degraded to a seq scan of findings as the table grows. Leading
+  // with review_id (the join key) + dismissed_at lets the null-filter apply in
+  // the index. Mirrors the agent_runs (pr_id, status, ran_at) index.
+  reviewDismissedIdx: index('findings_review_dismissed_idx').on(t.reviewId, t.dismissedAt),
+}));
 
 export const prIntent = pgTable('pr_intent', {
   prId: uuid('pr_id')
