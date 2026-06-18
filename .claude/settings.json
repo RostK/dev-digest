@@ -1,21 +1,11 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/insights-baseline.mjs\""
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/insights-capture.mjs\""
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/engineering-insights/hooks/insights-capture.mjs\""
           }
         ]
       }
