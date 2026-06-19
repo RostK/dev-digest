@@ -25,6 +25,9 @@ Data comes from the Fastify API over hooks — no server-side fetching.
   text in `messages/<locale>/<ns>.json`.
 - Mark `"use client"` on anything using hooks / state / router.
 - Import types and contracts from `@devdigest/shared`.
+- **Imports**: use the `@/*` alias for anything under `src/` (`@/lib/…`, `@/components/…`,
+  `@/i18n/…`). Keep only short same-feature relative paths (`./`, `../sibling`); no deep
+  `../../../` chains to shared dirs.
 
 ## Use when
 
