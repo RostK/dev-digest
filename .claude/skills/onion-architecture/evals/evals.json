@@ -1,0 +1,64 @@
+{
+  "skill_name": "onion-architecture",
+  "evals": [
+    {
+      "id": 0,
+      "name": "new-module-placement",
+      "prompt": "I'm adding a feature to the DevDigest server: an endpoint that lists a PR's labels from our database and can add a label by calling the GitHub API. Where does each piece go? I want to know where the DB query lives, where the GitHub call lives, where validation goes, and how the new module gets registered.",
+      "expected_output": "Lays the feature out as a vertical-slice module across the rings: queries in a workspace-scoped repository, the GitHub call behind the existing port resolved off the Container, schema-first Zod validation in a thin route, row->DTO mapping at the HTTP seam, and static registration in modules/index.ts.",
+      "files": [],
+      "expectations": [
+        "Creates modules/<name>/ with routes.ts -> service.ts -> repository.ts (a vertical slice), not a layer-per-folder split",
+        "Puts ALL Drizzle/SQL in repository.ts (or repository/<aggregate>.repo.ts), scoped by workspace_id, and keeps it out of the service and route",
+        "Routes the GitHub call through the GitHubClient port resolved via the Container (await container.github()), NOT an inline Octokit/fetch call",
+        "Uses schema-first Zod validation declared in the route schema (params/body) rather than hand-rolled Schema.parse(req.body)",
+        "Maps the persistence row to a Zod-contract DTO before returning over HTTP, instead of returning the raw row",
+        "Registers the module once in server/src/modules/index.ts (one import + one app.register)"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "layering-violation-review",
+      "prompt": "Review this DevDigest route handler for layering problems: it imports `{ eq } from 'drizzle-orm'` and `* as t from '../../db/schema.js'` and runs `db.select().from(t.pulls)...` directly, it does `new OctokitGitHubClient(process.env.GITHUB_TOKEN)` inside the handler, and it returns the Drizzle row straight as JSON. What's wrong and how should it be restructured?",
+      "expected_output": "Flags every inward/cross-ring violation and gives the onion-correct restructure: move the query to a workspace-scoped repository, resolve GitHub via the Container port (secret via SecretsProvider), and map the row to a contract DTO before returning.",
+      "files": [],
+      "expectations": [
+        "Flags the Drizzle query in the route as a violation and moves it into repository.ts",
+        "Flags `new OctokitGitHubClient(...)` as bypassing the Container and replaces it with await container.github()",
+        "Flags reading process.env for the token and routes it through container.secrets / SecretsProvider, noting secrets are never logged",
+        "Flags returning the raw Drizzle row and maps it to a Zod-contract DTO at the HTTP seam (helpers.ts)",
+        "Frames the fixes in terms of the inward dependency rule (presentation must not import infrastructure/Drizzle)",
+        "Does NOT recommend adding an ESLint boundaries plugin unprompted (the repo ships no linter)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "new-adapter-port",
+      "prompt": "We need the DevDigest backend to send Slack notifications when a review finishes. How should I add this so it fits our architecture and stays testable?",
+      "expected_output": "Defines a port in vendor/shared/adapters.ts, implements it as an adapter in adapters/slack/, wires it into the Container with secret resolution, and adds a mock for tests — so services depend on the interface, not the SDK.",
+      "files": [],
+      "expectations": [
+        "Defines a SlackClient interface (port) in server/src/vendor/shared/adapters.ts in the core ring",
+        "Implements it as a concrete adapter under server/src/adapters/slack/ that imports only the SDK + the port + platform/errors",
+        "Wires it into platform/container.ts (ContainerOverrides + a lazy getter) and resolves the token via SecretsProvider, not process.env in callers",
+        "Adds a mock to server/src/adapters/mocks.ts so tests inject it via buildApp({ overrides })",
+        "States that services depend on the SlackClient interface and resolve the concrete off the Container (inner defines the port, outer implements it)"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "zod-contracts-and-mapping",
+      "prompt": "I'm confused about types in the DevDigest backend. Should my service be allowed to import the Zod contracts from @devdigest/shared, or is that a layering violation? And should I introduce a mapping layer so the domain never touches Drizzle's $inferSelect row types, mapping at every layer?",
+      "expected_output": "Confirms shared Zod contracts are the intended shared domain+boundary type (importing them is correct), and prescribes the DevDigest map-at-the-seam rule: queries stay in the repository, row types may flow up as the persistence model, map to a DTO only where the shape diverges (the HTTP seam) — not a mapper at every layer.",
+      "files": [],
+      "expectations": [
+        "States that importing @devdigest/shared Zod contracts from the service (or any ring, including the core) is correct and NOT a layering violation",
+        "Explains DevDigest is in the schema-as-source-of-truth camp (one schema drives request validation, response serialization, and LLM output)",
+        "Says Drizzle QUERIES must stay in the repository, but row $inferSelect types MAY flow up to the service as the persistence model",
+        "Prescribes mapping row -> contract DTO only at the seam where the shape diverges (the HTTP boundary, e.g. helpers.ts), not a mapper at every layer",
+        "Rejects the purist 'domain must never reference an inferred type / map everywhere' stance as stricter than this codebase, citing Drizzle being a typed SQL builder (no proxies/lazy loading)",
+        "Mentions parse-don't-validate at the edges (schema-first routes; safeParse on LLM output)"
+      ]
+    }
+  ]
+}
