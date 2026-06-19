@@ -33,7 +33,7 @@ guaranteed capture, wire it to a `Stop` hook so it fires at the end of every ses
 
 Before doing **any** work, once the user has given their prompt:
 
-1. Read the relevant project doc per the root `CLAUDE.md` `## Read when` table — the doc
+1. Read the relevant project doc per the root `CLAUDE.md` `## Use when` table — the doc
    for the area you are about to touch.
 2. Read the touched/discussed module's `INSIGHTS.md` (see routing below) and treat it as
    **high-confidence guidance** unless told otherwise.

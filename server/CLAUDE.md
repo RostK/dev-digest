@@ -37,8 +37,8 @@ self-skips without Docker); everything else = hermetic unit (adapters mocked).
   handlers, and never log them.
 - Don't add migrate-on-boot; migrations are an explicit step.
 
-## Read when
+## Use when
 
-- Need the full API/route map or the request + DI flow → read `server/README.md`.
-- Working on repo indexing, the repo map, or blast radius → read
-  `src/modules/repo-intel/README.md`.
+- API/route map, request + DI flow, commands → read `server/README.md`
+- Repo indexing / repo map / blast radius → read `src/modules/repo-intel/README.md`
+- Deep-dives → read `server/docs/` · API/contract specs → read `server/specs/` · findings → read `server/INSIGHTS.md`

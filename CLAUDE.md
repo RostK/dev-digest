@@ -45,7 +45,7 @@ Dev machine is Windows + PowerShell, but `scripts/*.sh` are bash → run via Git
   fork the `server/src/vendor/shared/` contracts — they're the source of truth and
   ripple to every package.
 
-## Read when
+## Use when
 
 These docs are curated and often already answer the question — read the relevant one
 *before* reading code, then go to the source:

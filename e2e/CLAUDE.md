@@ -17,6 +17,7 @@ all down. Never touches your dev DB. Override ports with `E2E_PG_PORT` / `E2E_AP
 - Flows must stay **deterministic** — no LLM calls, no live network; assert against
   seeded data only.
 
-## Read when
+## Use when
 
-- Writing or debugging a flow spec → read `e2e/README.md` (spec format + commands).
+- Run, spec format, commands → read `e2e/README.md`
+- Flow specs → read `e2e/specs/` · Deep-dives → read `e2e/docs/` · findings → read `e2e/INSIGHTS.md`

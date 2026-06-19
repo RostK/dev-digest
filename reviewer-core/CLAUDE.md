@@ -18,6 +18,6 @@ Consumed as **source** by the server (tsconfig alias); never published.
 - Contracts come from `@devdigest/shared`; the public API is `src/index.ts`.
 - ESM relative imports carry the `.js` extension.
 
-## Read when
+## Use when
 
 - Need the full pipeline diagram or the public API surface → read `reviewer-core/README.md`.

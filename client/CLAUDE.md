@@ -26,6 +26,7 @@ Data comes from the Fastify API over hooks — no server-side fetching.
 - Mark `"use client"` on anything using hooks / state / router.
 - Import types and contracts from `@devdigest/shared`.
 
-## Read when
+## Use when
 
-- Need the UI route map or which API each screen calls → read `client/README.md`.
+- Page/route map, commands → read `client/README.md`
+- Deep-dives → read `client/docs/` · UI/flow specs → read `client/specs/` · findings → read `client/INSIGHTS.md`
