@@ -10,6 +10,7 @@ import type {
 } from '@devdigest/shared';
 import { AgentsRepository, type SkillBindingInput } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
+import { NotFoundError } from '../../platform/errors.js';
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -158,6 +159,7 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertSkillsInWorkspace(workspaceId, entries.map((e) => e.skillId));
     await this.repo.setSkills(agentId, entries);
     return this.skillLinks(agentId);
   }
@@ -172,10 +174,29 @@ export class AgentsService {
   ): Promise<AgentSkillLink[] | undefined> {
     const agent = await this.repo.getById(workspaceId, agentId);
     if (!agent) return undefined;
+    await this.assertSkillsInWorkspace(workspaceId, [skillId]);
     const existing = await this.repo.linkedSkills(agentId);
     const resolvedOrder = order ?? existing.length;
     await this.repo.linkSkill(agentId, skillId, resolvedOrder, enabled);
     return this.skillLinks(agentId);
+  }
+
+  /**
+   * Guard: every skill being linked must live in the SAME workspace as the agent.
+   * Without this a caller could link another tenant's skill id to their own agent
+   * and that skill's body would flow into this workspace's review prompt
+   * (cross-tenant IDOR). Resolves the skills repository through the Container
+   * (composition root) rather than reaching into the skills module directly.
+   * Throws NotFoundError (→ 404) on any id absent from this workspace so the
+   * response can't confirm a foreign skill's existence.
+   */
+  private async assertSkillsInWorkspace(workspaceId: string, skillIds: string[]): Promise<void> {
+    const unique = [...new Set(skillIds)];
+    if (unique.length === 0) return;
+    const found = await this.container.skillsRepo.existingIds(workspaceId, unique);
+    if (found.size !== unique.length) {
+      throw new NotFoundError('Skill not found');
+    }
   }
 
   /**

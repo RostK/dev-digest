@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillSource, SkillType } from '@devdigest/shared';
@@ -38,6 +38,20 @@ export class SkillsRepository {
       .from(t.skills)
       .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)));
     return row;
+  }
+
+  /**
+   * Of the given skill ids, the subset that exists IN this workspace. Lets the
+   * agents module reject linking a skill from another tenant (cross-tenant guard)
+   * without reaching into this module — it resolves us via `container.skillsRepo`.
+   */
+  async existingIds(workspaceId: string, ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.db
+      .select({ id: t.skills.id })
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), inArray(t.skills.id, ids)));
+    return new Set(rows.map((r) => r.id));
   }
 
   /** Insert a skill AND record version 1 in skill_versions (immutable body snapshot). */

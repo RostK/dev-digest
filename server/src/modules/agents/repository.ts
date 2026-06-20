@@ -222,11 +222,17 @@ export class AgentsRepository {
       .select({ body: t.skills.body })
       .from(t.agentSkills)
       .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
       .where(
         and(
           eq(t.agentSkills.agentId, agentId),
           eq(t.agentSkills.enabled, true),
           eq(t.skills.enabled, true),
+          // Defense-in-depth: the skill must belong to the SAME workspace as the
+          // agent. The agents service already blocks a cross-tenant link at write
+          // time; this keeps the prompt-feeding read safe even if a foreign link
+          // were ever created another way, so a skill body can't leak across tenants.
+          eq(t.skills.workspaceId, t.agents.workspaceId),
         ),
       )
       .orderBy(asc(t.agentSkills.order));
