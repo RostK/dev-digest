@@ -140,6 +140,28 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
+// An immutable body snapshot captured in `skill_versions` whenever a skill's
+// body changes (metadata-only / enabled edits don't bump). Mirrors the agents
+// versioning pattern, but a skill only versions its body (the prompt text).
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+// Result of parsing an uploaded markdown file or .zip for import: ONLY the skill
+// body text is extracted (the executable part of an archive is never read or
+// run). Surfaced as a preview the user must explicitly confirm before saving.
+export const SkillImportPreview = z.object({
+  name: z.string(),
+  body: z.string(),
+  ignored_files: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),
@@ -189,5 +211,8 @@ export const AgentSkillLink = z.object({
   agent_id: z.string(),
   skill_id: z.string(),
   order: z.number().int(),
+  // Per-binding toggle: the skill is attached to the agent but only fed into the
+  // review prompt when enabled (AND the skill itself is globally enabled).
+  enabled: z.boolean(),
 });
 export type AgentSkillLink = z.infer<typeof AgentSkillLink>;

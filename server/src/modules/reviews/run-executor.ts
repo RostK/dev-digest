@@ -183,6 +183,15 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // L02 — reusable skills. Resolve this agent's ENABLED skill bodies (the
+      // binding is enabled AND the skill itself is globally enabled), in order.
+      // Only these reach the assembled prompt's `## Skills / rules` block and the
+      // run trace; a disabled binding/skill is silently omitted.
+      const skillBodies = await this.agents.enabledSkillBodies(agent.id);
+      if (skillBodies.length) {
+        runLog.info(`skills: ${skillBodies.length} enabled skill(s) attached to the prompt`);
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -195,6 +204,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // L02 — enabled, ordered skill bodies. Omitted when none, so the prompt
+        // (and the trace's skills block) is identical to the pre-skills shape.
+        ...(skillBodies.length ? { skills: skillBodies } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),

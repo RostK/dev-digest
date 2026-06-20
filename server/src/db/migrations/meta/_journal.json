@@ -85,6 +85,13 @@
       "when": 1781691652096,
       "tag": "0011_illegal_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781942672573,
+      "tag": "0012_happy_smasher",
+      "breakpoints": true
     }
   ]
 }

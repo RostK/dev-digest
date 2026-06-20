@@ -56,15 +56,26 @@ const UpdateAgentBody = z.object({
   enabled: z.boolean().optional(),
 });
 
-/** Either set the whole ordered set (`skill_ids`) or link one (`skill_id`). */
+/**
+ * Either set the whole ordered set (`skills` — each `{ skill_id, enabled }`, list
+ * order = prompt order) or link one (`skill_id`). The Skills tab uses the former.
+ */
 const SetSkillsBody = z
   .object({
-    skill_ids: z.array(z.string().uuid()).optional(),
+    skills: z
+      .array(
+        z.object({
+          skill_id: z.string().uuid(),
+          enabled: z.boolean().optional().default(true),
+        }),
+      )
+      .optional(),
     skill_id: z.string().uuid().optional(),
     order: z.number().int().optional(),
+    enabled: z.boolean().optional(),
   })
-  .refine((b) => b.skill_ids !== undefined || b.skill_id !== undefined, {
-    message: 'Provide skill_ids (set/reorder) or skill_id (link one)',
+  .refine((b) => b.skills !== undefined || b.skill_id !== undefined, {
+    message: 'Provide skills (set/reorder) or skill_id (link one)',
   });
 
 export default async function agentsRoutes(appBase: FastifyInstance) {
@@ -156,9 +167,19 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
       const { workspaceId } = await getContext(app.container, req);
       const body = req.body;
       const links =
-        body.skill_ids !== undefined
-          ? await service.setSkills(workspaceId, req.params.id, body.skill_ids)
-          : await service.linkSkill(workspaceId, req.params.id, body.skill_id!, body.order);
+        body.skills !== undefined
+          ? await service.setSkills(
+              workspaceId,
+              req.params.id,
+              body.skills.map((s) => ({ skillId: s.skill_id, enabled: s.enabled })),
+            )
+          : await service.linkSkill(
+              workspaceId,
+              req.params.id,
+              body.skill_id!,
+              body.order,
+              body.enabled,
+            );
       if (!links) throw new NotFoundError('Agent not found');
       return links;
     },

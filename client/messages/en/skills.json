@@ -3,23 +3,68 @@
     "crumbLab": "Skills Lab",
     "crumbSkills": "Skills",
     "heading": "Skills",
-    "addSkill": "Add Skill",
+    "subtitle": "Reusable, user-editable review instructions shared across agents. Pure text + config — no tools, no code.",
     "searchPlaceholder": "Search skills…",
+    "addSkill": "Add Skill",
     "loadError": "Could not load skills.",
     "menu": {
-      "fromFile": "Import from file",
-      "fromUrl": "Import from URL",
-      "community": "Search community skills…"
+      "create": "Create from scratch",
+      "import": "Import from file…"
     },
     "empty": {
       "title": "No skills yet",
-      "body": "Import a skill from a file, a URL, or the community catalog.",
-      "cta": "Import from file"
-    },
-    "selectPrompt": {
-      "title": "Select a skill",
-      "body": "Pick a skill on the left to preview its body."
+      "body": "A skill is a reusable block of review instructions you attach to agents. Create one, or import a Markdown / .zip skill.",
+      "cta": "Create your first skill"
     }
+  },
+  "card": {
+    "noDescription": "No description",
+    "delete": "Delete skill",
+    "deleteConfirm": "Delete skill \"{name}\"? This cannot be undone."
+  },
+  "create": {
+    "title": "Create skill",
+    "subtitle": "A skill is reusable review instructions — pure text, attached to agents.",
+    "cancel": "Cancel",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "defaultName": "new-skill",
+    "defaultBody": "# Rule\nDescribe what the agent should check…",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "test-quality-rubric",
+      "description": "Description",
+      "descriptionHint": "The skill's interface — phrase it as a directive (e.g. \"Flag tests that only cover the happy path\"). Shown to the agent.",
+      "descriptionPlaceholder": "When this skill should apply",
+      "type": "Type",
+      "body": "Body (Markdown)",
+      "bodyHint": "The instructions appended to the agent's prompt. Stored as data — never executed."
+    }
+  },
+  "import": {
+    "title": "Import skill",
+    "subtitle": "Upload a Markdown file or a .zip — only the skill body is extracted.",
+    "trust": "Heads up: an imported skill is someone else's instructions injected into your agent's prompt. Review the body below before saving. The executable part of an archive is never read or run.",
+    "fileLabel": "Skill file (.md or .zip)",
+    "fileHint": "We extract only the Markdown body. Other archive entries are listed but never executed.",
+    "parsing": "Reading file…",
+    "failed": "Import failed.",
+    "nameLabel": "Skill name",
+    "typeLabel": "Type",
+    "ignoredLabel": "Ignored archive entries",
+    "bodyLabel": "Skill body (Markdown)",
+    "bodyHint": "Review before saving. Imported skills are saved disabled until you vet + enable them.",
+    "back": "Back",
+    "confirm": "Save skill",
+    "saving": "Saving…"
+  },
+  "preview": {
+    "loading": "Loading…",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "close": "Close",
+    "edit": "Edit",
+    "version": "v{version}"
   },
   "detail": {
     "crumbSkill": "Skill",
@@ -30,72 +75,26 @@
       "body": "It may have been deleted."
     }
   },
-  "drawer": {
-    "title": "Add a skill",
-    "subtitle": "Import from a file, a URL, or search vetted community skills",
-    "tabs": {
-      "file": "From file",
-      "url": "From URL",
-      "community": "Community"
-    },
-    "importFailed": "Import failed"
-  },
-  "file": {
-    "nameLabel": "Skill name",
-    "nameHint": "Optional — derived from the first heading if blank.",
-    "namePlaceholder": "pr-quality-rubric",
-    "bodyLabel": "Skill body (Markdown)",
-    "bodyHint": "Pasted content is wrapped as untrusted data — never executed as instructions.",
-    "bodyPlaceholder": "# Rule\nDescribe the rule…",
-    "importing": "Importing…",
-    "import": "Import skill",
-    "success": "Imported \"{name}\" (stored as untrusted data)."
-  },
-  "url": {
-    "label": "Skill URL",
-    "hint": "Fetched server-side, stored as untrusted, and left disabled until vetted.",
-    "placeholder": "https://example.com/skills/security.md",
-    "fetching": "Fetching…",
-    "import": "Import from URL",
-    "success": "Imported \"{name}\". Disabled until you vet + enable it."
-  },
-  "community": {
-    "searchPlaceholder": "Search community skills (e.g. security)…",
-    "allLanguages": "All languages",
-    "loadError": "Could not load community skills",
-    "retry": "Retry",
-    "noMatch": {
-      "title": "No matching skills",
-      "body": "Try a different search term."
-    },
-    "importing": "Importing…",
-    "import": "Import"
+  "editor": {
+    "enabled": "Enabled",
+    "name": "Name",
+    "description": "Description",
+    "descriptionHint": "The skill's interface — phrase it as a directive. Shown to the agent under the field.",
+    "type": "Type",
+    "body": "Body (Markdown)",
+    "bodyHint": "Saving a changed body creates a new immutable version.",
+    "save": "Save skill",
+    "saving": "Saving…",
+    "saved": "Saved (v{version})",
+    "savedToast": "Skill saved (v{version})",
+    "delete": "Delete skill"
   },
   "listItem": {
-    "needsVetting": "needs vetting",
-    "vettingTitle": "Untrusted source — vet before enabling",
     "type": {
       "rubric": "rubric",
       "convention": "convention",
       "security": "security",
       "custom": "custom"
-    },
-    "source": {
-      "manual": "Manual",
-      "extracted": "Extracted",
-      "community": "Community",
-      "imported_url": "Imported"
     }
-  },
-  "preview": {
-    "untrustedBadge": "untrusted source",
-    "enabled": "Enabled",
-    "disabled": "Disabled",
-    "save": "Save",
-    "edit": "Edit",
-    "untrustedNotice": "This skill came from an untrusted source. Its body is stored as data (delimiter-wrapped) and must be vetted before it is enabled for an agent.",
-    "bodyLabel": "Skill body (Markdown)",
-    "bodyHint": "Saving a changed body creates a new immutable version.",
-    "version": "v{version}"
   }
 }

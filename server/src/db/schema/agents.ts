@@ -58,6 +58,10 @@ export const agentSkills = pgTable(
       .notNull()
       .references(() => skills.id, { onDelete: 'cascade' }),
     order: integer('order').notNull().default(0),
+    // Per-binding toggle (Agent editor → Skills tab): an attached skill can be
+    // disabled for this agent without unlinking it, so it keeps its drag order.
+    // Only enabled bindings (AND globally-enabled skills) feed the review prompt.
+    enabled: boolean('enabled').notNull().default(true),
   },
   (t) => ({ pk: primaryKey({ columns: [t.agentId, t.skillId] }) }),
 );
