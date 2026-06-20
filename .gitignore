@@ -23,3 +23,6 @@ test-results/
 
 # emdash worktree config (local)
 .emdash.json
+
+# pr-self-review local verdict cache (per-machine, not shared)
+.claude/.pr-self-review-state.json
