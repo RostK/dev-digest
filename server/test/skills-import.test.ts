@@ -58,4 +58,14 @@ describe('parseSkillImport', () => {
   it('rejects an empty markdown file', () => {
     expect(() => parseSkillImport('empty.md', strToU8('   '))).toThrow();
   });
+
+  it('rejects a zip whose markdown entry decompresses past the import limit (zip-bomb)', () => {
+    // ~2 MB uncompressed of one repeated byte → DEFLATE crushes it to a few KB,
+    // so the compressed input sails under the service-level byte cap but the
+    // decompressed body is over the limit.
+    const huge = 'a'.repeat(2_000_000);
+    const zip = zipSync({ 'SKILL.md': strToU8(huge) });
+    expect(zip.length).toBeLessThan(1_000_000);
+    expect(() => parseSkillImport('bomb.zip', zip)).toThrow(/limit/i);
+  });
 });

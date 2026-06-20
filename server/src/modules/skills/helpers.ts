@@ -2,6 +2,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import type { Skill, SkillSource, SkillType, SkillVersion } from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
+import { MAX_IMPORT_BYTES } from './constants.js';
 
 /**
  * Pure helpers for the skills module — DB row ⇄ DTO mapping, the body-version-bump
@@ -87,6 +88,11 @@ export function parseSkillImport(filename: string, bytes: Uint8Array): ParsedImp
 
   if (lower.endsWith('.zip')) {
     const seen: string[] = [];
+    // Budget for DECOMPRESSED markdown bytes. The compressed-input cap (service,
+    // MAX_IMPORT_BYTES on the decoded upload) can't stop a zip-bomb that inflates
+    // ~1000:1, so we also bound the uncompressed size BEFORE fflate inflates each
+    // markdown entry.
+    let decodedBudget = MAX_IMPORT_BYTES;
     let entries: Record<string, Uint8Array>;
     try {
       // filter() runs for EVERY entry; we record real-file names but only return
@@ -97,10 +103,21 @@ export function parseSkillImport(filename: string, bytes: Uint8Array): ParsedImp
           const isDir = f.name.endsWith('/');
           const isMacJunk = f.name.startsWith('__MACOSX/');
           if (!isDir && !isMacJunk) seen.push(f.name);
-          return isMarkdown(f.name) && !isMacJunk;
+          if (!(isMarkdown(f.name) && !isMacJunk)) return false;
+          // f.originalSize is the entry's UNCOMPRESSED size from the zip
+          // directory; refuse before inflating if it would blow the budget.
+          if (f.originalSize > decodedBudget) {
+            throw new ValidationError(
+              'The skill archive decompresses to more than the import limit.',
+            );
+          }
+          decodedBudget -= f.originalSize;
+          return true;
         },
       });
-    } catch {
+    } catch (err) {
+      // Keep a precise size error; mask only genuine archive-read failures.
+      if (err instanceof ValidationError) throw err;
       throw new ValidationError('Could not read the .zip archive.');
     }
 
