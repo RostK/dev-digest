@@ -7,6 +7,11 @@
     "searchPlaceholder": "Search skills…",
     "addSkill": "Add Skill",
     "loadError": "Could not load skills.",
+    "scope": {
+      "repo": "This repo",
+      "global": "Global only",
+      "all": "All repos"
+    },
     "menu": {
       "create": "Create from scratch",
       "import": "Import from file…"

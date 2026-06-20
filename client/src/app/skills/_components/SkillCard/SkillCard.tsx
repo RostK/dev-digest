@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Icon, Badge, Toggle } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { useDeleteSkill } from "@/lib/hooks/skills";
+import { useRepos } from "@/lib/hooks";
 import { skillTypeColor } from "@/lib/skill-type";
 import { s } from "./styles";
 
@@ -21,6 +22,10 @@ export function SkillCard({
 }) {
   const t = useTranslations("skills");
   const del = useDeleteSkill();
+  const { data: repos } = useRepos();
+  // Repo-pinned skills (e.g. extracted conventions) carry a repo_id; show which
+  // repo they're scoped to. Global skills (null) render no repo badge.
+  const repo = skill.repo_id ? repos?.find((r) => r.id === skill.repo_id) : undefined;
   return (
     <div onClick={onClick} style={s.card(skill.enabled)}>
       <div style={s.headerRow}>
@@ -54,6 +59,11 @@ export function SkillCard({
       <div style={s.description}>{skill.description || t("card.noDescription")}</div>
       <div style={s.metaRow}>
         <Badge color={skillTypeColor(skill.type)}>{t(`listItem.type.${skill.type}`)}</Badge>
+        {repo && (
+          <Badge color="#3b82f6" icon="GitBranch">
+            {repo.full_name.split("/").pop()}
+          </Badge>
+        )}
       </div>
     </div>
   );

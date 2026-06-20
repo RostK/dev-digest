@@ -20,6 +20,7 @@ export function toSkillDto(row: SkillRow): Skill {
     body: row.body,
     enabled: row.enabled,
     version: row.version,
+    repo_id: row.repoId ?? null,
     evidence_files: row.evidenceFiles ?? null,
   };
 }
@@ -43,6 +44,7 @@ export interface SkillPatch {
   body?: string;
   enabled?: boolean;
   evidenceFiles?: string[] | null;
+  repoId?: string | null;
 }
 
 /**

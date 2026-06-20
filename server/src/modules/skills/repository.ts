@@ -16,6 +16,7 @@ export type { SkillRow, SkillVersionRow };
 
 export interface InsertSkill {
   workspaceId: string;
+  repoId?: string | null;
   name: string;
   description?: string;
   type: SkillType;
@@ -54,12 +55,22 @@ export class SkillsRepository {
     return new Set(rows.map((r) => r.id));
   }
 
+  /** True when `repoId` is a repo in this workspace — gates pinning a skill to it. */
+  async repoInWorkspace(workspaceId: string, repoId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: t.repos.id })
+      .from(t.repos)
+      .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
+    return !!row;
+  }
+
   /** Insert a skill AND record version 1 in skill_versions (immutable body snapshot). */
   async insert(values: InsertSkill): Promise<SkillRow> {
     const [row] = await this.db
       .insert(t.skills)
       .values({
         workspaceId: values.workspaceId,
+        repoId: values.repoId ?? null,
         name: values.name,
         description: values.description ?? DEFAULT_SKILL_DESCRIPTION,
         type: values.type,
@@ -95,6 +106,7 @@ export class SkillsRepository {
         ...(patch.body !== undefined ? { body: patch.body } : {}),
         ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
         ...(patch.evidenceFiles !== undefined ? { evidenceFiles: patch.evidenceFiles } : {}),
+        ...(patch.repoId !== undefined ? { repoId: patch.repoId } : {}),
         ...(bodyChanged ? { version: nextVersion } : {}),
       })
       .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))

@@ -127,6 +127,9 @@ export const Skill = z.object({
   body: z.string(),
   enabled: z.boolean(),
   version: z.number().int(),
+  // Optional repo scope: null = global (default), set = pinned to that repo (e.g.
+  // extracted conventions). Pinned skills only feed a review of that same repo.
+  repo_id: z.string().nullish(),
   evidence_files: z.array(z.string()).nullish(),
 });
 export type Skill = z.infer<typeof Skill>;
@@ -163,11 +166,32 @@ export const SkillImportPreview = z.object({
 export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
 
 // ---- Conventions ----
+// Coarse buckets a convention falls into. Used to group accepted candidates when
+// the user chooses "split into one skill per category".
+export const ConventionCategory = z.enum([
+  'naming',
+  'error_handling',
+  'structure',
+  'imports',
+  'typing',
+  'testing',
+  'async',
+  'style',
+  'other',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
+  category: ConventionCategory,
   rule: z.string(),
   evidence_path: z.string(),
   evidence_snippet: z.string(),
+  // 1-based inclusive line range of `evidence_snippet` within `evidence_path`,
+  // derived from the ACTUAL file during grounding (not the model's claim) so a
+  // deep-link always lands on real code. Null only for legacy/ungrounded rows.
+  evidence_start_line: z.number().int().nullish(),
+  evidence_end_line: z.number().int().nullish(),
   confidence: z.number().min(0).max(1),
   accepted: z.boolean(),
 });

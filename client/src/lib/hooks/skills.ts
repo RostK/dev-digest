@@ -27,6 +27,10 @@ export interface CreateSkillInput {
   source?: SkillSource;
   body: string;
   enabled?: boolean;
+  /** Repo-relative paths the skill was extracted from (conventions flow). */
+  evidence_files?: string[];
+  /** Pin the skill to a repo (conventions flow); omit/undefined = global. */
+  repo_id?: string;
 }
 
 export function useCreateSkill() {
