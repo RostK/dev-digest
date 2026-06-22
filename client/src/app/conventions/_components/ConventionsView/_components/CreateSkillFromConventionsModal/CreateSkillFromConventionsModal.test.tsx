@@ -31,11 +31,10 @@ const ITEMS: ConventionCandidate[] = [
 ];
 
 describe("CreateSkillFromConventionsModal", () => {
-  it("creates an extracted skill pinned to the active repo (repo_id)", async () => {
+  it("creates a GLOBAL extracted convention skill (no repo_id pin)", async () => {
     render(
       <NextIntlClientProvider locale="en" messages={{ conventions: messages }}>
         <CreateSkillFromConventionsModal
-          repoId="repo-1"
           repoFullName="acme/payments"
           items={ITEMS}
           onClose={vi.fn()}
@@ -47,7 +46,8 @@ describe("CreateSkillFromConventionsModal", () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
     const arg = mutateAsync.mock.calls[0]![0];
-    expect(arg).toMatchObject({ repo_id: "repo-1", source: "extracted", type: "convention" });
+    expect(arg).toMatchObject({ source: "extracted", type: "convention" });
+    expect(arg.repo_id).toBeUndefined();
     expect(arg.evidence_files).toContain("src/a.ts");
   });
 });

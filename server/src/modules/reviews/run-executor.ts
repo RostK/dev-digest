@@ -187,7 +187,7 @@ export class ReviewRunExecutor {
       // binding is enabled AND the skill itself is globally enabled), in order.
       // Only these reach the assembled prompt's `## Skills / rules` block and the
       // run trace; a disabled binding/skill is silently omitted.
-      const skillBodies = await this.agents.enabledSkillBodies(agent.id, pull.repoId);
+      const skillBodies = await this.agents.enabledSkillBodies(agent.id);
       if (skillBodies.length) {
         runLog.info(`skills: ${skillBodies.length} enabled skill(s) attached to the prompt`);
       }

@@ -1,7 +1,8 @@
 import { SkillsListView } from "./_components/SkillsListView";
 
-/* Route: /skills (Skills list). Thin route entry — the view, its create/import
-   modals, preview, styles, constants, helpers and i18n are colocated under
+/* Route: /skills — Skills Lab (master-detail). Thin route entry: renders the
+   shared shell with no skill selected (empty detail panel). Selecting a skill
+   deep-links to /skills/:id?tab=. Everything is colocated under
    _components/SkillsListView. */
 export default function SkillsPage() {
   return <SkillsListView />;

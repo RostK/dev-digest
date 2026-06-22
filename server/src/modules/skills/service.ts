@@ -6,7 +6,7 @@ import type {
   SkillType,
   SkillVersion,
 } from '@devdigest/shared';
-import { NotFoundError, ValidationError } from '../../platform/errors.js';
+import { ValidationError } from '../../platform/errors.js';
 import { SkillsRepository } from './repository.js';
 import { toSkillDto, toSkillVersionDto, parseSkillImport, type SkillPatch } from './helpers.js';
 import { DEFAULT_SKILL_SOURCE, MAX_IMPORT_BYTES } from './constants.js';
@@ -27,7 +27,6 @@ export interface CreateSkillInput {
   body: string;
   enabled?: boolean;
   evidence_files?: string[];
-  repo_id?: string | null;
 }
 
 export interface UpdateSkillInput {
@@ -38,7 +37,6 @@ export interface UpdateSkillInput {
   body?: string;
   enabled?: boolean;
   evidence_files?: string[] | null;
-  repo_id?: string | null;
 }
 
 export class SkillsService {
@@ -59,7 +57,6 @@ export class SkillsService {
   }
 
   async create(workspaceId: string, input: CreateSkillInput): Promise<Skill> {
-    await this.assertRepoScope(workspaceId, input.repo_id);
     const row = await this.repo.insert({
       workspaceId,
       name: input.name,
@@ -69,7 +66,6 @@ export class SkillsService {
       ...(input.description !== undefined ? { description: input.description } : {}),
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
       ...(input.evidence_files !== undefined ? { evidenceFiles: input.evidence_files } : {}),
-      ...(input.repo_id !== undefined ? { repoId: input.repo_id } : {}),
     });
     return toSkillDto(row);
   }
@@ -79,7 +75,6 @@ export class SkillsService {
     id: string,
     patch: UpdateSkillInput,
   ): Promise<Skill | undefined> {
-    if (patch.repo_id !== undefined) await this.assertRepoScope(workspaceId, patch.repo_id);
     const mapped: SkillPatch = {
       ...(patch.name !== undefined ? { name: patch.name } : {}),
       ...(patch.description !== undefined ? { description: patch.description } : {}),
@@ -88,25 +83,9 @@ export class SkillsService {
       ...(patch.body !== undefined ? { body: patch.body } : {}),
       ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
       ...(patch.evidence_files !== undefined ? { evidenceFiles: patch.evidence_files } : {}),
-      ...(patch.repo_id !== undefined ? { repoId: patch.repo_id } : {}),
     };
     const row = await this.repo.update(workspaceId, id, mapped);
     return row ? toSkillDto(row) : undefined;
-  }
-
-  /**
-   * Guard pinning a skill to a repo: a non-null `repoId` must be a repo in THIS
-   * workspace, else the pin is a cross-tenant reference (IDOR). Null/undefined =
-   * global skill, always allowed.
-   */
-  private async assertRepoScope(
-    workspaceId: string,
-    repoId: string | null | undefined,
-  ): Promise<void> {
-    if (repoId == null) return;
-    if (!(await this.repo.repoInWorkspace(workspaceId, repoId))) {
-      throw new NotFoundError('Repo not found');
-    }
   }
 
   /** Delete a skill (and its versions / agent links, via cascade). */

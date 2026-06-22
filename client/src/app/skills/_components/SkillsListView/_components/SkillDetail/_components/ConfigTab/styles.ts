@@ -1,19 +1,9 @@
 import type { CSSProperties } from "react";
 
-/** Co-located styles for SkillEditor. */
+/** Co-located styles for the ConfigTab editor form (ported from SkillEditor). */
 export const s = {
-  page: { padding: "24px 32px 44px", maxWidth: 860, margin: "0 auto" } satisfies CSSProperties,
-  loading: { display: "flex", flexDirection: "column", gap: 16 } satisfies CSSProperties,
   form: { maxWidth: 760 } satisfies CSSProperties,
   header: { display: "flex", alignItems: "center", marginBottom: 18 } satisfies CSSProperties,
-  back: {
-    background: "none",
-    border: "none",
-    cursor: "pointer",
-    color: "var(--text-secondary)",
-    fontSize: 13,
-    padding: 0,
-  } satisfies CSSProperties,
   enabledLabel: {
     marginLeft: "auto",
     display: "flex",

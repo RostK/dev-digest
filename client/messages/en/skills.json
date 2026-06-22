@@ -7,11 +7,6 @@
     "searchPlaceholder": "Search skills…",
     "addSkill": "Add Skill",
     "loadError": "Could not load skills.",
-    "scope": {
-      "repo": "This repo",
-      "global": "Global only",
-      "all": "All repos"
-    },
     "menu": {
       "create": "Create from scratch",
       "import": "Import from file…"
@@ -74,10 +69,34 @@
   "detail": {
     "crumbSkill": "Skill",
     "back": "← All skills",
+    "disabled": "disabled",
     "loadError": "Could not load this skill.",
     "notFound": {
       "title": "Skill not found",
       "body": "It may have been deleted."
+    },
+    "selectTitle": "Select a skill",
+    "selectBody": "Choose a skill from the list to view and edit its config, preview, stats and version history.",
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "stats": "Stats",
+      "versions": "Versions"
+    },
+    "preview": {
+      "heading": "Skill body",
+      "note": "Rendered as raw text — never executed as Markdown or HTML."
+    },
+    "stats": {
+      "title": "Stats coming soon",
+      "body": "Per-skill usage — runs, acceptance rate and average cost — lands in a later lesson."
+    },
+    "versions": {
+      "heading": "Version history",
+      "current": "current",
+      "version": "v{version}",
+      "empty": "No version history yet.",
+      "loadError": "Could not load versions."
     }
   },
   "editor": {

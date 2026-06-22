@@ -127,9 +127,6 @@ export const Skill = z.object({
   body: z.string(),
   enabled: z.boolean(),
   version: z.number().int(),
-  // Optional repo scope: null = global (default), set = pinned to that repo (e.g.
-  // extracted conventions). Pinned skills only feed a review of that same repo.
-  repo_id: z.string().nullish(),
   evidence_files: z.array(z.string()).nullish(),
 });
 export type Skill = z.infer<typeof Skill>;

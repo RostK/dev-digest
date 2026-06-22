@@ -2,12 +2,12 @@ import type { CSSProperties } from "react";
 
 /** Co-located styles for SkillCard (mirrors AgentCard). */
 export const s = {
-  card: (enabled: boolean): CSSProperties => ({
+  card: (active: boolean, enabled: boolean): CSSProperties => ({
     padding: 14,
     borderRadius: 8,
     cursor: "pointer",
-    border: "1px solid var(--border)",
-    background: "var(--bg-elevated)",
+    border: "1px solid " + (active ? "var(--border-strong)" : "var(--border)"),
+    background: active ? "var(--bg-hover)" : "var(--bg-elevated)",
     opacity: enabled ? 1 : 0.6,
     marginBottom: 10,
   }),

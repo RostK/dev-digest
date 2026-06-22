@@ -64,7 +64,6 @@ export function ConventionsView() {
         source: "extracted",
         body: buildSkillBody(activeRepo.full_name, items, name),
         evidence_files: evidenceFiles(items),
-        repo_id: activeRepo.id,
       });
     }
     router.push("/skills");
@@ -81,7 +80,6 @@ export function ConventionsView() {
     <AppShell crumb={crumb}>
       {creating && activeRepo && (
         <CreateSkillFromConventionsModal
-          repoId={activeRepo.id}
           repoFullName={activeRepo.full_name}
           items={accepted}
           onClose={() => setCreating(false)}

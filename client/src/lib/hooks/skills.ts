@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { Skill, SkillImportPreview, SkillSource, SkillType } from "@devdigest/shared";
+import type { Skill, SkillImportPreview, SkillSource, SkillType, SkillVersion } from "@devdigest/shared";
 
 export function useSkills() {
   return useQuery({
@@ -20,6 +20,16 @@ export function useSkill(id: string | null | undefined) {
   });
 }
 
+/** Immutable body-history snapshots for a skill (newest first). Powers the
+ *  Versions tab; cache is invalidated by useUpdateSkill when a body edit bumps. */
+export function useSkillVersions(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-versions", id],
+    queryFn: () => api.get<SkillVersion[]>(`/skills/${id}/versions`),
+    enabled: !!id,
+  });
+}
+
 export interface CreateSkillInput {
   name: string;
   description?: string;
@@ -29,8 +39,6 @@ export interface CreateSkillInput {
   enabled?: boolean;
   /** Repo-relative paths the skill was extracted from (conventions flow). */
   evidence_files?: string[];
-  /** Pin the skill to a repo (conventions flow); omit/undefined = global. */
-  repo_id?: string;
 }
 
 export function useCreateSkill() {
@@ -53,6 +61,8 @@ export function useUpdateSkill() {
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["skills"] });
       qc.setQueryData(["skill", data.id], data);
+      // A body edit appends a new immutable version → refresh the Versions tab.
+      qc.invalidateQueries({ queryKey: ["skill-versions", data.id] });
     },
   });
 }

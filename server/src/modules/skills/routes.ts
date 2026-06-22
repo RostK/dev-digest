@@ -27,7 +27,6 @@ const CreateSkillBody = z.object({
   body: z.string().min(1),
   enabled: z.boolean().optional(),
   evidence_files: z.array(z.string()).optional(),
-  repo_id: z.string().uuid().nullish(),
 });
 
 const UpdateSkillBody = z.object({
@@ -38,7 +37,6 @@ const UpdateSkillBody = z.object({
   body: z.string().min(1).optional(),
   enabled: z.boolean().optional(),
   evidence_files: z.array(z.string()).nullish(),
-  repo_id: z.string().uuid().nullish(),
 });
 
 const ImportPreviewBody = z.object({
@@ -73,7 +71,6 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
       ...(b.source !== undefined ? { source: b.source } : {}),
       ...(b.enabled !== undefined ? { enabled: b.enabled } : {}),
       ...(b.evidence_files !== undefined ? { evidence_files: b.evidence_files } : {}),
-      ...(b.repo_id !== undefined ? { repo_id: b.repo_id } : {}),
     });
     reply.status(201);
     return skill;

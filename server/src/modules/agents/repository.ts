@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -213,12 +213,12 @@ export class AgentsRepository {
 
   /**
    * Bodies of the skills that actually feed this agent's review prompt, in order:
-   * the binding is enabled AND the skill itself is globally enabled AND the skill
-   * is in scope for `repoId` (global skills, repo_id IS NULL, always apply; a
-   * repo-pinned skill applies only when reviewing that repo). Used by the review
-   * executor — anything filtered out never reaches the prompt or the trace block.
+   * the binding is enabled AND the skill itself is globally enabled. Skills are
+   * global (not repo-scoped), so every enabled, linked skill feeds every review.
+   * Used by the review executor — anything filtered out never reaches the prompt
+   * or the trace block.
    */
-  async enabledSkillBodies(agentId: string, repoId: string): Promise<string[]> {
+  async enabledSkillBodies(agentId: string): Promise<string[]> {
     const rows = await this.db
       .select({ body: t.skills.body })
       .from(t.agentSkills)
@@ -234,10 +234,6 @@ export class AgentsRepository {
           // time; this keeps the prompt-feeding read safe even if a foreign link
           // were ever created another way, so a skill body can't leak across tenants.
           eq(t.skills.workspaceId, t.agents.workspaceId),
-          // Repo scope: global skills always apply; a pinned skill only when its
-          // repo matches the PR's repo (so one agent's conventions don't bleed
-          // across the other repos it reviews).
-          or(isNull(t.skills.repoId), eq(t.skills.repoId, repoId)),
         ),
       )
       .orderBy(asc(t.agentSkills.order));

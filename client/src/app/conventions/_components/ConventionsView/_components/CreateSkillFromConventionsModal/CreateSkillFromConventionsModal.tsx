@@ -1,6 +1,7 @@
 /* CreateSkillFromConventionsModal — merge the accepted candidates into one Skill.
    Name / description / type / enabled / markdown body are pre-filled and editable;
-   on save it creates an `extracted` convention skill via the existing /skills API. */
+   on save it creates a GLOBAL `extracted` convention skill via the existing
+   /skills API (skills are not repo-scoped — no repo_id pin). */
 "use client";
 
 import React from "react";
@@ -15,12 +16,10 @@ import { DEFAULT_SKILL_TYPE, MODAL_WIDTH } from "./constants";
 import { s } from "./styles";
 
 export function CreateSkillFromConventionsModal({
-  repoId,
   repoFullName,
   items,
   onClose,
 }: {
-  repoId: string;
   repoFullName: string;
   items: ConventionCandidate[];
   onClose: () => void;
@@ -48,7 +47,6 @@ export function CreateSkillFromConventionsModal({
       enabled,
       body: body.trim() || buildSkillBody(repoFullName, items, finalName),
       evidence_files: evidenceFiles(items),
-      repo_id: repoId,
     });
     onClose();
     router.push(`/skills/${skill.id}`);

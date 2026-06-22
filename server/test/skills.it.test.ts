@@ -107,9 +107,6 @@ d('skills module', () => {
   it('feeds only enabled bindings of enabled skills to the prompt, in order', async () => {
     const app = await makeApp();
     const repo = new AgentsRepository(pg.handle.db);
-    // These skills are global (no repo_id), so they feed any repo's review — the
-    // repoId arg only filters repo-pinned skills (covered in skills-repo-scope.it).
-    const anyRepoId = '00000000-0000-0000-0000-000000000000';
 
     const agentId = (
       await app.inject({
@@ -142,11 +139,11 @@ d('skills module', () => {
     expect(set.json()).toHaveLength(3);
 
     // only enabled bindings flow, in order: A then C.
-    expect(await repo.enabledSkillBodies(agentId, anyRepoId)).toEqual(['BODY-A', 'BODY-C']);
+    expect(await repo.enabledSkillBodies(agentId)).toEqual(['BODY-A', 'BODY-C']);
 
     // globally disabling skill C drops it too.
     await app.inject({ method: 'PUT', url: `/skills/${c}`, payload: { enabled: false } });
-    expect(await repo.enabledSkillBodies(agentId, anyRepoId)).toEqual(['BODY-A']);
+    expect(await repo.enabledSkillBodies(agentId)).toEqual(['BODY-A']);
 
     // the link list still reports all three bindings with their enabled flags.
     const links = (await app.inject({ method: 'GET', url: `/agents/${agentId}/skills` })).json();
