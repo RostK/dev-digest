@@ -8,8 +8,19 @@
     "scanning": "Scanning…",
     "rescan": "Re-scan",
     "runExtraction": "Run extraction",
-    "extractionFailed": "Extraction failed",
+    "extractionFailed": "Extraction failed. Check that the repo is indexed and a model is configured.",
     "loadError": "Could not load conventions.",
+    "acceptedCount": "{accepted} of {total} accepted",
+    "deselectAll": "Deselect all",
+    "createSkill": "Create skill",
+    "createSkillMenu": {
+      "merge": "Merge accepted → one skill",
+      "split": "Split into one skill per category"
+    },
+    "noRepo": {
+      "title": "No repository selected",
+      "body": "Add and index a repository, then come back to extract its conventions."
+    },
     "empty": {
       "title": "No conventions extracted yet",
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
@@ -21,6 +32,28 @@
     "confidence": "Confidence",
     "accepted": "Accepted",
     "accepting": "Accepting…",
-    "acceptAsSkill": "Accept as Skill"
+    "accept": "Accept",
+    "reject": "Reject",
+    "acceptAsSkill": "Accept as Skill",
+    "viewSource": "View on GitHub"
+  },
+  "create": {
+    "title": "Create skill from conventions",
+    "merged": "Merged from {count, plural, one {# accepted convention} other {# accepted conventions}} in {repo}. Everything below is editable before you save.",
+    "defaultDescription": "House conventions extracted from {repo}",
+    "categoryDescription": "{category} conventions extracted from {repo}",
+    "savedHint": "Saved as v1 → added to Skills Lab",
+    "cancel": "Cancel",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "type": "Type",
+      "enabled": "Enabled",
+      "enabledHint": "Whether this block is added to agents’ prompts.",
+      "body": "Skill body",
+      "bodyHint": "Markdown enforced at review time — keep the cited file:line evidence."
+    }
   }
 }

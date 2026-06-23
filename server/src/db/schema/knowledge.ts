@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, vector, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, integer, vector, index } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
@@ -34,9 +34,20 @@ export const conventions = pgTable('conventions', {
     .notNull()
     .references(() => workspaces.id, { onDelete: 'cascade' }),
   repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
+  // Coarse bucket (naming / error_handling / structure / …) for grouping into
+  // per-category skills. Validated against ConventionCategory in the contract.
+  category: text('category'),
   rule: text('rule').notNull(),
   evidencePath: text('evidence_path'),
   evidenceSnippet: text('evidence_snippet'),
+  // 1-based inclusive line range of the snippet within the evidence file, set
+  // during grounding from the real file (drives the GitHub deep-link).
+  evidenceStartLine: integer('evidence_start_line'),
+  evidenceEndLine: integer('evidence_end_line'),
   confidence: doublePrecision('confidence'),
   accepted: boolean('accepted').notNull().default(false),
-});
+}, (t) => ({
+  // list/deleteByRepo/setAccepted all filter by (workspace_id, repo_id); the
+  // repo_id FK also gets indexed for cascade deletes. (FK ≠ index in Postgres.)
+  repoIdx: index('conventions_repo_idx').on(t.workspaceId, t.repoId),
+}));

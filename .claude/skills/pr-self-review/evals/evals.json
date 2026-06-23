@@ -1,0 +1,60 @@
+{
+  "skill_name": "pr-self-review",
+  "evals": [
+    {
+      "id": 0,
+      "name": "pre-push-trigger",
+      "prompt": "I'm about to push this branch and open a PR. Can you sanity-check my local changes first?",
+      "expected_output": "Invokes pr-self-review: computes the diff scope, routes changed files to the matching skills, reports findings by severity, and records a clean/blocked verdict.",
+      "files": [],
+      "expectations": [
+        "Recognizes this as a pre-PR self-review and runs the pr-self-review procedure (does not just eyeball the diff ad hoc)",
+        "Computes the review scope as base...HEAD plus the working tree, and lists the changed files",
+        "Routes UI files to the frontend skills and backend/domain files to the backend skills rather than reviewing generically",
+        "Records the verdict via hooks/pr-gate.mjs record and reports findings grouped by severity"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "ui-vs-backend-routing",
+      "prompt": "Run a self-review. The diff changes client/src/app/agents/_components/AgentCard/AgentCard.tsx and server/src/modules/agents/repository.ts.",
+      "expected_output": "Routes the .tsx file through the frontend skills (frontend-ui-architecture, react-best-practices, next-best-practices) and the repository.ts through onion-architecture + drizzle-orm-patterns, checking workspace_id scoping.",
+      "files": [
+        "client/src/app/agents/_components/AgentCard/AgentCard.tsx",
+        "server/src/modules/agents/repository.ts"
+      ],
+      "expectations": [
+        "Sends AgentCard.tsx to the UI bucket (frontend-ui-architecture / react-best-practices / next-best-practices), not to backend skills",
+        "Sends repository.ts to onion-architecture and drizzle-orm-patterns",
+        "Checks that the repository query is scoped by workspace_id (a missing scope is critical)",
+        "Does not run mermaid-diagram or engineering-insights as review rubrics"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "critical-blocks-push",
+      "prompt": "Self-review my branch, then push it. One repository query was changed to drop the workspace_id filter.",
+      "expected_output": "Flags the missing workspace_id scope as critical, records verdict=blocked, and refuses/blocks the push until it is fixed and re-reviewed.",
+      "files": [],
+      "expectations": [
+        "Classifies the dropped workspace_id filter as a critical (cross-tenant data leak), citing onion-architecture / drizzle-orm-patterns",
+        "Records verdict=blocked with criticalCount >= 1 via pr-gate.mjs record",
+        "States that git push / gh pr create / gh pr merge will be denied until the critical is resolved",
+        "Does not push the branch while the critical stands"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "clean-passes-gate",
+      "prompt": "Pre-flight this diff: I renamed a few client constants and added a unit test. Anything blocking?",
+      "expected_output": "Routes the files to the UI + react-testing-library skills, finds no critical, records verdict=clean, and confirms the gate will allow the push.",
+      "files": [],
+      "expectations": [
+        "Routes the test file through react-testing-library and the constants through the UI skills",
+        "Finds no critical and records verdict=clean (criticalCount 0)",
+        "Confirms the push/PR gate will allow the command",
+        "Reports any high/medium/low findings without inflating them to critical"
+      ]
+    }
+  ]
+}

@@ -6,6 +6,8 @@ import {
   GENERAL_REVIEWER_PROMPT,
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
+  TEST_QUALITY_REVIEWER_PROMPT,
+  TEST_QUALITY_SKILL_BODY,
 } from './seed-prompts.js';
 
 /** Default provider/model for the built-in reviewer agents. */
@@ -219,6 +221,64 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
   }
+
+  // ---- L02: Test Quality Reviewer + its reusable test-quality skill ----
+  // The reviewer's capability lives in a SKILL (reusable across agents, toggled
+  // per-agent), not in its prompt — so the skills control experiment is
+  // observable: disable the skill on the Skills tab and the agent misses the
+  // uncovered branch; enable it and the rubric flags it.
+  let [skill] = await db
+    .select()
+    .from(t.skills)
+    .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, 'test-quality-rubric')));
+  if (!skill) {
+    [skill] = await db
+      .insert(t.skills)
+      .values({
+        workspaceId,
+        name: 'test-quality-rubric',
+        description:
+          'Flag weak tests: uncovered branches, missing corner cases, over-mocking, and flaky patterns.',
+        type: 'rubric',
+        source: 'manual',
+        body: TEST_QUALITY_SKILL_BODY,
+        enabled: true,
+        version: 1,
+      })
+      .returning();
+    await db
+      .insert(t.skillVersions)
+      .values({ skillId: skill!.id, version: 1, body: TEST_QUALITY_SKILL_BODY })
+      .onConflictDoNothing();
+  }
+
+  let [tqAgent] = await db
+    .select()
+    .from(t.agents)
+    .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, 'Test Quality Reviewer')));
+  if (!tqAgent) {
+    [tqAgent] = await db
+      .insert(t.agents)
+      .values({
+        workspaceId,
+        name: 'Test Quality Reviewer',
+        description:
+          'Checks test quality — uncovered branches, missed corner cases, over-mocking, flaky tests (via the test-quality-rubric skill).',
+        provider: DEFAULT_PROVIDER,
+        model: DEFAULT_MODEL,
+        systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
+        enabled: true,
+        version: 1,
+        createdBy: userId,
+      })
+      .returning();
+  }
+
+  // Attach the skill (enabled) so a default run already flags weak tests.
+  await db
+    .insert(t.agentSkills)
+    .values({ agentId: tqAgent!.id, skillId: skill!.id, order: 0, enabled: true })
+    .onConflictDoNothing();
 
   return { workspaceId, userId };
 }

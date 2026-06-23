@@ -7,7 +7,6 @@ afterEach(cleanup);
 
 function finding(o: Partial<FindingRecord> & { id: string }): FindingRecord {
   return {
-    id: o.id,
     severity: "CRITICAL",
     category: "security",
     title: o.id,

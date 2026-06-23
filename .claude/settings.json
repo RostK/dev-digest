@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/skills/pr-self-review/hooks/pr-gate.mjs\""
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

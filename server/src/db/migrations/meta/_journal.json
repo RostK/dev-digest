@@ -85,6 +85,41 @@
       "when": 1781691652096,
       "tag": "0011_illegal_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781942672573,
+      "tag": "0012_happy_smasher",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1781953004981,
+      "tag": "0013_whole_peter_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1781957013000,
+      "tag": "0014_high_reavers",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1781959344114,
+      "tag": "0015_volatile_johnny_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1782116859609,
+      "tag": "0016_organic_tempest",
+      "breakpoints": true
     }
   ]
 }

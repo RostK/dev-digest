@@ -140,12 +140,55 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
+// An immutable body snapshot captured in `skill_versions` whenever a skill's
+// body changes (metadata-only / enabled edits don't bump). Mirrors the agents
+// versioning pattern, but a skill only versions its body (the prompt text).
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+// Result of parsing an uploaded markdown file or .zip for import: ONLY the skill
+// body text is extracted (the executable part of an archive is never read or
+// run). Surfaced as a preview the user must explicitly confirm before saving.
+export const SkillImportPreview = z.object({
+  name: z.string(),
+  body: z.string(),
+  ignored_files: z.array(z.string()),
+  warnings: z.array(z.string()),
+});
+export type SkillImportPreview = z.infer<typeof SkillImportPreview>;
+
 // ---- Conventions ----
+// Coarse buckets a convention falls into. Used to group accepted candidates when
+// the user chooses "split into one skill per category".
+export const ConventionCategory = z.enum([
+  'naming',
+  'error_handling',
+  'structure',
+  'imports',
+  'typing',
+  'testing',
+  'async',
+  'style',
+  'other',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
+  category: ConventionCategory,
   rule: z.string(),
   evidence_path: z.string(),
   evidence_snippet: z.string(),
+  // 1-based inclusive line range of `evidence_snippet` within `evidence_path`,
+  // derived from the ACTUAL file during grounding (not the model's claim) so a
+  // deep-link always lands on real code. Null only for legacy/ungrounded rows.
+  evidence_start_line: z.number().int().nullish(),
+  evidence_end_line: z.number().int().nullish(),
   confidence: z.number().min(0).max(1),
   accepted: z.boolean(),
 });
@@ -189,5 +232,8 @@ export const AgentSkillLink = z.object({
   agent_id: z.string(),
   skill_id: z.string(),
   order: z.number().int(),
+  // Per-binding toggle: the skill is attached to the agent but only fed into the
+  // review prompt when enabled (AND the skill itself is globally enabled).
+  enabled: z.boolean(),
 });
 export type AgentSkillLink = z.infer<typeof AgentSkillLink>;

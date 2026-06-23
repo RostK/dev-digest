@@ -1,0 +1,64 @@
+{
+  "skill_name": "frontend-ui-architecture",
+  "evals": [
+    {
+      "id": 0,
+      "name": "greenfield-react-structure",
+      "prompt": "I'm starting a new React + Vite app — a SaaS dashboard with authentication, billing/subscriptions, and a team-settings area. How should I lay out the `src/` folder? I want to know where shared components go vs feature-specific ones, where API calls and TypeScript types live, and how to keep it from turning into a mess as we add features.",
+      "expected_output": "Commits to one concrete feature-based src/ tree, with a public-API feature boundary, lib-vs-utils split, a type-placement promotion rule, the promote-on-second-use rule, and a way to enforce the boundaries.",
+      "files": [],
+      "expectations": [
+        "Commits to a single concrete feature-based src/ tree as THE recommendation, not a menu of options left to the reader",
+        "States features expose a public entry (index.ts) and/or must not import each other's internals",
+        "Distinguishes lib/ (stateful integrations/clients) from utils/ (pure functions) explicitly — not just 'utils for helpers'",
+        "Gives a promotion rule for shared code (local first; promote to shared on the 2nd consumer)",
+        "Places types with a colocate-then-promote rule rather than only a global types/ folder",
+        "Mentions enforcing boundaries (ESLint import rules and/or path aliases), not just naming folders"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "messy-nextjs-reorg",
+      "prompt": "My Next.js 15 App Router project has gotten messy. I've got a `utils.ts` file with ~30 unrelated functions, business logic sitting inside page components, and I keep putting everything under `app/`. How should I reorganize? Specifically: what belongs in `app/` vs elsewhere, how do I split utils vs lib vs helpers, and where should data-fetching / server-side DB access go so I'm not leaking stuff to the client?",
+      "expected_output": "Keeps app/ routing-only, fixes the junk drawer by cohesion, splits lib/utils/helpers with a rule, routes business logic into hooks/services and data access into a server-only DAL, uses Next.js org features, and gives a migration path.",
+      "files": [],
+      "expectations": [
+        "Says app/ is routing-only and logic moves into feature/module folders",
+        "Fixes the junk-drawer by naming files by what they provide / grouping by cohesion — not just 'split utils.ts into a few files'",
+        "Distinguishes lib (stateful) vs utils (pure) vs helpers (project-specific) with a usable rule",
+        "Routes business logic out of pages into hooks/services AND puts data access in a server-only DAL that is the sole reader of process.env/DB",
+        "Uses Next.js private folders (_folder) and/or route groups ((group)) for colocation",
+        "Gives a concrete migration path / ordering, not only the target structure"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "fat-component-decomposition",
+      "prompt": "I have a 400-line `<InvoicesDashboard>` component that fetches invoices, holds filter + pagination state, and renders a chart plus a table with row actions. Should I break it up, and if so how should I organize the pieces — where do the data fetching, the filter state, and the business logic go?",
+      "expected_output": "Splits on responsibilities (not lines), moves fetching to a server-state hook, colocates the pieces, commits to a home for filter/pagination state, keeps the component presentational, and gives a concrete file layout.",
+      "files": [],
+      "expectations": [
+        "Splits on responsibilities and explicitly rejects line count as the criterion",
+        "Moves data fetching into a hook backed by server-state tooling (e.g. TanStack Query), not useState+useEffect in the component",
+        "Colocates the split pieces (subcomponents/hooks/helpers) beside the component",
+        "Commits to a specific home for filter/pagination state (e.g. the URL for shareable filters) rather than only 'lift it up'",
+        "Keeps the component presentational and pushes business logic into hooks/helpers",
+        "Gives a concrete file/folder layout for the decomposed pieces"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "server-client-boundary",
+      "prompt": "In my Next.js 15 App Router app I'm confused about the Server/Client split. I have a dashboard layout, an interactive filter sidebar, and a form that creates records in the database. Where should I put `'use client'`, how should I organize my Server Actions, and how do I keep my DB access and API keys out of the client bundle?",
+      "expected_output": "Server Components by default with 'use client' on leaves, children-composition across the boundary, thin Server Actions in a dedicated module, a server-only DAL as the sole secrets reader, and a client Providers wrapper.",
+      "files": [],
+      "expectations": [
+        "Keeps Server Components as default and puts 'use client' only on interactive leaves (sidebar/form), not on the layout/page",
+        "Composes by passing Server Components as children/props into Client Components AND notes a Client Component cannot import a Server Component",
+        "Puts Server Actions in a dedicated thin module (actions.ts / _actions) that validates + authorizes then delegates",
+        "Isolates server-only code via the server-only package and/or a DAL that is the sole reader of secrets/DB",
+        "Describes a client Providers wrapper for context so the rest of the tree stays server-rendered"
+      ]
+    }
+  ]
+}
