@@ -94,7 +94,7 @@ export class IntentService {
 
     await this.repo.upsertIntent(pull.id, res.intent);
 
-    this.logSavings(diff, res.tokensIn, res.tokensOut, onLog);
+    this.logSavings(diff, `${provider}/${model}`, res.tokensIn, res.tokensOut, onLog);
     return res.intent;
   }
 
@@ -173,6 +173,7 @@ export class IntentService {
    */
   private logSavings(
     diff: UnifiedDiff,
+    modelLabel: string,
     tokensIn: number,
     tokensOut: number,
     onLog?: (msg: string) => void,
@@ -181,7 +182,7 @@ export class IntentService {
     const estFullDiffTokens = Math.ceil(diff.raw.length / 4);
     const saved = Math.max(0, estFullDiffTokens - tokensIn);
     onLog(
-      `intent: classified (${tokensIn}→${tokensOut} tok; ~${saved} tok saved vs full-diff input)`,
+      `intent: classified via ${modelLabel} (${tokensIn}→${tokensOut} tok; ~${saved} tok saved vs full-diff input)`,
     );
   }
 }
