@@ -19,6 +19,54 @@ import { s, chevronFor } from "../styles";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
 
+/** Findings badge shown in the FileCard header when finding_lines are present.
+ *  Extracted to its own component so useTranslations("prReview") is only called
+ *  when this component is actually rendered (keeps the smoke test clean). */
+function FindingsBadge({
+  findingLines,
+  filePath,
+  onExpand,
+}: {
+  findingLines: number[];
+  filePath: string;
+  onExpand: () => void;
+}) {
+  const t = useTranslations("prReview");
+  return (
+    <button
+      type="button"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "2px 8px",
+        borderRadius: 5,
+        fontSize: 12,
+        fontWeight: 600,
+        color: "var(--accent)",
+        background: "var(--accent-bg, rgba(99,102,241,.12))",
+        cursor: "pointer",
+        border: "none",
+        lineHeight: 1.4,
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onExpand();
+        const firstLine = findingLines[0];
+        if (firstLine != null) {
+          requestAnimationFrame(() => {
+            const id = `sd-${filePath}-L${firstLine}`;
+            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+          });
+        }
+      }}
+    >
+      <Icon.AlertTriangle size={12} />
+      {t("smartDiff.findingsBadge", { count: findingLines.length })}
+    </button>
+  );
+}
+
 /** Threads anchored to a given parsed line (RIGHT=new, LEFT=old). */
 function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): CommentThread[] {
   if (matched.size === 0) return [];
@@ -30,10 +78,22 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+export function FileCard({
+  file,
+  commenting,
+  findingLines,
+  defaultOpen,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /** New-side line numbers that have findings (Smart Diff). */
+  findingLines?: number[];
+  /** Override the default auto-expand heuristic. */
+  defaultOpen?: boolean;
+}) {
   const t = useTranslations("shell");
   const [open, setOpen] = React.useState(
-    (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
 
@@ -72,21 +132,39 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
             {commentCount}
           </span>
         )}
+        {findingLines && findingLines.length > 0 && (
+          <FindingsBadge
+            findingLines={findingLines}
+            filePath={file.path}
+            onExpand={() => setOpen(true)}
+          />
+        )}
       </div>
       {open && (
         <div style={s.fileBody}>
           {lines.length === 0 ? (
             <div style={s.noDiff}>{t("diffViewer.noDiffText")}</div>
           ) : (
-            lines.map((ln, i) => (
-              <CodeLine
-                key={i}
-                ln={ln}
-                path={file.path}
-                threads={threadsForLine(ln, matched)}
-                commenting={commenting}
-              />
-            ))
+            lines.map((ln, i) => {
+              const isHighlight =
+                findingLines != null &&
+                ln.newNo != null &&
+                findingLines.includes(ln.newNo);
+              const anchorId = isHighlight && ln.newNo != null
+                ? `sd-${file.path}-L${ln.newNo}`
+                : undefined;
+              return (
+                <CodeLine
+                  key={i}
+                  ln={ln}
+                  path={file.path}
+                  threads={threadsForLine(ln, matched)}
+                  commenting={commenting}
+                  highlight={isHighlight}
+                  anchorId={anchorId}
+                />
+              );
+            })
           )}
           {commenting && commenting.showComments && <OutdatedComments threads={outdated} />}
         </div>

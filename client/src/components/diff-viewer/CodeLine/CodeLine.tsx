@@ -14,11 +14,17 @@ export function CodeLine({
   path,
   threads,
   commenting,
+  highlight,
+  anchorId,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** True when this line is a Smart Diff finding line (accent highlight). */
+  highlight?: boolean;
+  /** DOM id for the row wrapper, used for scroll-to-finding. */
+  anchorId?: string;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -35,9 +41,14 @@ export function CodeLine({
   const target = commenting?.canComment ? commentTargetFor(ln) : null;
   const showAdd = hover && !!target && !composing;
 
+  const highlightStyle: React.CSSProperties = highlight
+    ? { borderLeft: "3px solid var(--accent)", background: "var(--accent-bg, rgba(99,102,241,.08))" }
+    : {};
+
   return (
     <div
-      style={cs.rowWrap}
+      id={anchorId}
+      style={{ ...cs.rowWrap, ...highlightStyle }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >

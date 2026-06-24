@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, Intent, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, Intent, RunEventKind, RunTrace, SmartDiff } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { runCostUsd } from '../../adapters/llm/pricing.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -9,6 +9,7 @@ import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { IntentService } from './intent-service.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
+import { composeSmartDiff } from './smart-diff.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -174,6 +175,47 @@ export class ReviewService {
     }
     return rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
+    );
+  }
+
+  /**
+   * Compose the Smart Diff for a PR: classify each changed file by role
+   * (boilerplate / wiring / core), annotate with finding lines from the most
+   * recent review per agent, and produce a split suggestion.
+   *
+   * Purely deterministic — NEVER calls an LLM. The expensive model pass already
+   * happened in the Structured Reviewer; this only composes ready files + ready
+   * findings, so it costs zero tokens.
+   */
+  async smartDiff(workspaceId: string, prId: string): Promise<SmartDiff> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+
+    const [files, reviewRows] = await Promise.all([
+      this.repo.getPrFiles(prId),
+      this.repo.reviewsForPull(prId),
+    ]);
+
+    // Pick the newest review per agentId (reviewsForPull is newest-first, so
+    // the first-seen per agentId wins). null agentId is its own bucket (the
+    // seed review). Collect non-dismissed findings from the winning reviews —
+    // mirrors the PR-list rollup so badge counts agree across the app.
+    const seenAgents = new Set<string | null>();
+    const findings: { file: string; start_line: number }[] = [];
+    for (const { review, findings: rowFindings } of reviewRows) {
+      const key = review.agentId ?? null;
+      if (seenAgents.has(key)) continue;
+      seenAgents.add(key);
+      for (const f of rowFindings) {
+        if (f.dismissedAt == null) {
+          findings.push({ file: f.file, start_line: f.startLine });
+        }
+      }
+    }
+
+    return composeSmartDiff(
+      files.map((f) => ({ path: f.path, additions: f.additions, deletions: f.deletions })),
+      findings,
     );
   }
 
