@@ -131,6 +131,23 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     return service.reviewsForPull(workspaceId, req.params.id);
   });
 
+  // ---- Intent Layer: derived PR intent/scope ------------------------------
+  // GET is a pure read (null until computed). Recompute forces re-classification
+  // (cheap LLM pass) — rate-limited like the review trigger.
+  app.get('/pulls/:id/intent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getIntent(workspaceId, req.params.id);
+  });
+
+  app.post(
+    '/pulls/:id/intent/recompute',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.recomputeIntent(workspaceId, req.params.id, req.log);
+    },
+  );
+
   // ---- Delete a whole review run (one agent's pass) + its findings --------
   app.delete('/reviews/:id', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(container, req);

@@ -1,0 +1,9 @@
+{
+  "title": "Intent",
+  "inScope": "In scope",
+  "outOfScope": "Out of scope",
+  "recompute": "Recompute",
+  "computing": "Computing intent…",
+  "empty": "Intent not yet computed.",
+  "emptyHint": "Run a review to classify the scope of this pull request."
+}

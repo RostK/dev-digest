@@ -1,4 +1,4 @@
-import type { ChatMessage, PromptAssembly } from '@devdigest/shared';
+import type { ChatMessage, Intent, PromptAssembly } from '@devdigest/shared';
 
 /**
  * Prompt assembly + prompt-injection hardening.
@@ -66,6 +66,15 @@ export interface PromptParts {
    * undefined → section omitted.
    */
   prDescription?: string;
+  /**
+   * Structured derived intent (from classifyIntent). When present:
+   *  - Its VALUES are rendered as a `## PR intent` block (wrapped untrusted)
+   *    immediately after `## PR description` and before the skills block.
+   *  - A TRUSTED scope rule is appended to the system string (after INJECTION_GUARD)
+   *    instructing the reviewer to focus on in-scope areas.
+   * Absent → NO system suffix, NO section; behaviour is byte-identical to before.
+   */
+  intent?: Intent;
   /** The unified diff / user task (untrusted content). */
   diff: string;
   /** Optional task framing line, e.g. "Review PR #482 '…'". */
@@ -83,7 +92,18 @@ export interface AssembledPrompt {
  * appended to the system message.
  */
 export function assemblePrompt(parts: PromptParts): AssembledPrompt {
-  const system = `${parts.system}\n\n${INJECTION_GUARD}`;
+  // Trusted scope rule appended only when intent is present (after INJECTION_GUARD).
+  // It narrows the review focus without overriding the security mandate.
+  const SCOPE_RULE = parts.intent
+    ? '\n\nSCOPE GUIDANCE — the derived PR intent below identifies in-scope and out-of-scope ' +
+      'areas for this change. Focus your review on the in-scope items; do NOT pile up comments ' +
+      'on out-of-scope or clearly-unrelated areas. For a SERIOUS defect found outside the stated ' +
+      'scope, surface EXACTLY ONE signal finding, not many. ' +
+      'This NEVER overrides the SECURITY rule above — a real vulnerability or correctness defect ' +
+      'is always reported with its true severity regardless of scope.'
+    : '';
+
+  const system = `${parts.system}\n\n${INJECTION_GUARD}${SCOPE_RULE}`;
 
   const skillsBlock =
     parts.skills && parts.skills.length > 0 ? parts.skills.join('\n\n') : undefined;
@@ -101,11 +121,31 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
       ? parts.prDescription.slice(0, MAX_PR_DESCRIPTION_CHARS)
       : undefined;
 
+  // Render the intent VALUES as a labeled, untrusted block. The VALUES come from
+  // an LLM call (classifyIntent) which processed untrusted PR content, so the
+  // rendered text is still treated as untrusted data in the reviewer's prompt.
+  let intentSection: string | null = null;
+  if (parts.intent) {
+    const inScopeLines =
+      parts.intent.in_scope.length > 0
+        ? parts.intent.in_scope.map((s) => `- ${s}`).join('\n')
+        : '(none listed)';
+    const outOfScopeLines =
+      parts.intent.out_of_scope.length > 0
+        ? parts.intent.out_of_scope.map((s) => `- ${s}`).join('\n')
+        : '(none listed)';
+    const intentText =
+      `Summary: ${parts.intent.intent}\n\nIn scope:\n${inScopeLines}\n\nOut of scope:\n${outOfScopeLines}`;
+    intentSection = `## PR intent\n${wrapUntrusted('intent', intentText)}`;
+  }
+
   const userSections: string[] = [];
   if (parts.task) userSections.push(parts.task);
   if (prDescription) {
     userSections.push(`## PR description\n${wrapUntrusted('pr-description', prDescription)}`);
   }
+  // Intent section immediately after PR description, before skills/memory/context.
+  if (intentSection) userSections.push(intentSection);
   if (skillsBlock) userSections.push(`## Skills / rules\n${skillsBlock}`);
   if (memoryBlock) userSections.push(`## Relevant memory\n${memoryBlock}`);
   if (parts.repoMap && parts.repoMap.trim().length > 0) {
@@ -134,6 +174,7 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     callers: parts.callers ?? null,
     repo_map: parts.repoMap ?? null,
     pr_description: prDescription ?? null,
+    intent: intentSection ?? null,
     user,
   };
 

@@ -1,11 +1,12 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, Intent, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { runCostUsd } from '../../adapters/llm/pricing.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
+import { IntentService } from './intent-service.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
 
@@ -29,12 +30,14 @@ export type { ReviewDto, ReviewDtoFinding } from './helpers.js';
 export class ReviewService {
   private repo: ReviewRepository;
   private agents: Container['agentsRepo'];
+  private intent: IntentService;
   private executor: ReviewRunExecutor;
 
   constructor(private container: Container) {
     this.repo = new ReviewRepository(container.db);
     this.agents = container.agentsRepo;
-    this.executor = new ReviewRunExecutor(container, this.repo, this.agents);
+    this.intent = new IntentService(container, this.repo);
+    this.executor = new ReviewRunExecutor(container, this.repo, this.agents, this.intent);
   }
 
   // ===========================================================================
@@ -171,6 +174,31 @@ export class ReviewService {
     }
     return rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
+    );
+  }
+
+  // ===========================================================================
+  // Intent Layer (derived PR intent/scope)
+  // ===========================================================================
+
+  /** Stored intent for a PR; null when not yet computed (pure read, no compute). */
+  async getIntent(workspaceId: string, prId: string): Promise<Intent | null> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    return (await this.repo.getIntent(prId)) ?? null;
+  }
+
+  /** Force (re)classification of a PR's intent + persist (the "Recompute" button). */
+  async recomputeIntent(workspaceId: string, prId: string, logger?: Logger): Promise<Intent> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+    return this.intent.compute(
+      workspaceId,
+      pull,
+      repo,
+      logger ? (m) => logger.info({ prId }, m) : undefined,
     );
   }
 
