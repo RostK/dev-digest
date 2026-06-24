@@ -6,6 +6,9 @@
  * 2. Boilerplate section is collapsed by default (its files not visible).
  * 3. A file with finding_lines shows a badge with the correct count.
  * 4. A core file renders before a boilerplate file (DOM order).
+ * 5. Per-line severity badges render correctly ("blocker"/"warning"/"suggestion").
+ * 6. "What this does" line appears when pseudocode_summary is set.
+ * 7. Core files default open; wiring files open only when they have findings.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
@@ -15,6 +18,7 @@ import type { PrFile } from "@devdigest/shared";
 import prReviewMessages from "../../../../messages/en/prReview.json";
 import shellMessages from "../../../../messages/en/shell.json";
 import { SmartDiffViewer } from "./SmartDiffViewer";
+import type { FindingsBySeverity } from "./SmartDiffViewer";
 
 const messages = { prReview: prReviewMessages, shell: shellMessages };
 
@@ -43,6 +47,35 @@ const BOILERPLATE_FILE: PrFile = {
   patch: "@@ -1,1 +1,500 @@\n{",
 };
 
+// ---- reusable group fixtures ----
+
+const WIRING_GROUP: SmartDiff["groups"][number] = {
+  role: "wiring",
+  files: [
+    {
+      path: "src/router.ts",
+      pseudocode_summary: null,
+      additions: 3,
+      deletions: 1,
+      finding_lines: [],
+    },
+  ],
+};
+
+const BOILERPLATE_GROUP: SmartDiff["groups"][number] = {
+  role: "boilerplate",
+  files: [
+    {
+      path: "package-lock.json",
+      pseudocode_summary: null,
+      additions: 500,
+      deletions: 200,
+      finding_lines: [],
+    },
+  ],
+};
+
+/** Core file has finding_lines, wiring/boilerplate do not. */
 const SMART_DIFF: SmartDiff = {
   groups: [
     {
@@ -57,30 +90,8 @@ const SMART_DIFF: SmartDiff = {
         },
       ],
     },
-    {
-      role: "wiring",
-      files: [
-        {
-          path: "src/router.ts",
-          pseudocode_summary: null,
-          additions: 3,
-          deletions: 1,
-          finding_lines: [],
-        },
-      ],
-    },
-    {
-      role: "boilerplate",
-      files: [
-        {
-          path: "package-lock.json",
-          pseudocode_summary: null,
-          additions: 500,
-          deletions: 200,
-          finding_lines: [],
-        },
-      ],
-    },
+    WIRING_GROUP,
+    BOILERPLATE_GROUP,
   ],
   split_suggestion: {
     too_big: false,
@@ -91,10 +102,18 @@ const SMART_DIFF: SmartDiff = {
 
 const ALL_PR_FILES: PrFile[] = [CORE_FILE, WIRING_FILE, BOILERPLATE_FILE];
 
-function renderViewer(smartDiff: SmartDiff = SMART_DIFF, files: PrFile[] = ALL_PR_FILES) {
+function renderViewer(
+  smartDiff: SmartDiff = SMART_DIFF,
+  files: PrFile[] = ALL_PR_FILES,
+  findingsBySeverity?: FindingsBySeverity,
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={messages}>
-      <SmartDiffViewer files={files} smartDiff={smartDiff} />
+      <SmartDiffViewer
+        files={files}
+        smartDiff={smartDiff}
+        findingsBySeverity={findingsBySeverity}
+      />
     </NextIntlClientProvider>,
   );
 }
@@ -105,7 +124,7 @@ describe("SmartDiffViewer", () => {
   it("renders groups in core → wiring → boilerplate order", () => {
     renderViewer();
 
-    const core = screen.getByText("Core");
+    const core = screen.getByText("Core logic");
     const wiring = screen.getByText("Wiring");
     const boilerplate = screen.getByText("Boilerplate");
 
@@ -114,8 +133,8 @@ describe("SmartDiffViewer", () => {
     expect(boilerplate).toBeInTheDocument();
 
     // DOM order: core must appear before wiring, wiring before boilerplate
-    const all = screen.getAllByText(/^(Core|Wiring|Boilerplate)$/);
-    expect(all[0]).toHaveTextContent("Core");
+    const all = screen.getAllByText(/^(Core logic|Wiring|Boilerplate)$/);
+    expect(all[0]).toHaveTextContent("Core logic");
     expect(all[1]).toHaveTextContent("Wiring");
     expect(all[2]).toHaveTextContent("Boilerplate");
   });
@@ -181,5 +200,175 @@ describe("SmartDiffViewer", () => {
   it("does not render split suggestion banner when too_big is false", () => {
     renderViewer();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // ---- New: per-line severity badges ----
+
+  it("renders a 'blocker' severity badge on a CRITICAL finding line", () => {
+    // Core file has finding_lines [2, 3]; map line 2 → CRITICAL
+    const findingsBySeverity: FindingsBySeverity = new Map([
+      ["src/core.ts", new Map([[2, "CRITICAL"]])],
+    ]);
+    renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
+
+    // The core file opens by default (role === "core") so diff lines are visible
+    // Line 2 of the patch is "+add1" (new-side line 2)
+    // The severity badge should say "blocker"
+    expect(screen.getByText("blocker")).toBeInTheDocument();
+  });
+
+  it("renders a 'warning' severity badge on a WARNING finding line", () => {
+    const findingsBySeverity: FindingsBySeverity = new Map([
+      ["src/core.ts", new Map([[2, "WARNING"]])],
+    ]);
+    renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
+    expect(screen.getByText("warning")).toBeInTheDocument();
+  });
+
+  it("renders 'suggestion' severity badge(s) on SUGGESTION finding lines", () => {
+    const findingsBySeverity: FindingsBySeverity = new Map([
+      ["src/core.ts", new Map([[2, "SUGGESTION"]])],
+    ]);
+    renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
+    // line 2 → SUGGESTION from the map; line 3 → SUGGESTION fallback from finding_lines
+    const badges = screen.getAllByText("suggestion");
+    expect(badges.length).toBeGreaterThan(0);
+  });
+
+  // ---- New: "What this does" from pseudocode_summary ----
+
+  it("renders the 'What this does' line when pseudocode_summary is set", () => {
+    const diffWithSummary: SmartDiff = {
+      ...SMART_DIFF,
+      groups: [
+        {
+          role: "core",
+          files: [
+            {
+              path: "src/core.ts",
+              pseudocode_summary: "Validates user input then writes to DB",
+              additions: 10,
+              deletions: 2,
+              finding_lines: [],
+            },
+          ],
+        },
+        WIRING_GROUP,
+        BOILERPLATE_GROUP,
+      ],
+    };
+    renderViewer(diffWithSummary);
+    expect(screen.getByText("What this does:")).toBeInTheDocument();
+    expect(screen.getByText("Validates user input then writes to DB")).toBeInTheDocument();
+  });
+
+  it("does not render 'What this does' when pseudocode_summary is null", () => {
+    renderViewer(); // SMART_DIFF has pseudocode_summary: null on all files
+    expect(screen.queryByText("What this does:")).not.toBeInTheDocument();
+  });
+
+  it("does not render the summary pill when pseudocode_summary is null", () => {
+    renderViewer();
+    expect(screen.queryByText("summary")).not.toBeInTheDocument();
+  });
+
+  it("renders the summary pill when pseudocode_summary is set", () => {
+    const diffWithSummary: SmartDiff = {
+      ...SMART_DIFF,
+      groups: [
+        {
+          role: "core",
+          files: [
+            {
+              path: "src/core.ts",
+              pseudocode_summary: "Does something useful",
+              additions: 10,
+              deletions: 2,
+              finding_lines: [],
+            },
+          ],
+        },
+        WIRING_GROUP,
+        BOILERPLATE_GROUP,
+      ],
+    };
+    renderViewer(diffWithSummary);
+    expect(screen.getByText("summary")).toBeInTheDocument();
+  });
+
+  // ---- New: auto-expand Core files ----
+
+  it("core file without finding_lines is still open by default (role=core always open)", () => {
+    const diffCoreNoFindings: SmartDiff = {
+      ...SMART_DIFF,
+      groups: [
+        {
+          role: "core",
+          files: [
+            {
+              path: "src/core.ts",
+              pseudocode_summary: null,
+              additions: 10,
+              deletions: 2,
+              finding_lines: [], // no findings
+            },
+          ],
+        },
+        WIRING_GROUP,
+        BOILERPLATE_GROUP,
+      ],
+    };
+    renderViewer(diffCoreNoFindings);
+    // The core group is expanded; the file header should be visible
+    expect(screen.getByText("src/core.ts")).toBeInTheDocument();
+  });
+
+  it("wiring file with no findings is NOT open by default", () => {
+    renderViewer();
+    // Wiring group is expanded (role !== boilerplate), so src/router.ts header is visible
+    // BUT the file card itself should be collapsed (no findings, not core role)
+    // Since the wiring section is open, the file path should be visible in the DOM
+    // but the file body (diff content) should not be visible
+    expect(screen.getByText("src/router.ts")).toBeInTheDocument();
+    // The wiring file's diff lines ("+route1") should not be visible — card collapsed
+    expect(screen.queryByText("route1")).not.toBeInTheDocument();
+  });
+
+  it("wiring file WITH findings is open by default", () => {
+    const CORE_GROUP: SmartDiff["groups"][number] = {
+      role: "core",
+      files: [
+        {
+          path: "src/core.ts",
+          pseudocode_summary: null,
+          additions: 10,
+          deletions: 2,
+          finding_lines: [2, 3],
+        },
+      ],
+    };
+    const diffWiringWithFindings: SmartDiff = {
+      ...SMART_DIFF,
+      groups: [
+        CORE_GROUP,
+        {
+          role: "wiring",
+          files: [
+            {
+              path: "src/router.ts",
+              pseudocode_summary: null,
+              additions: 3,
+              deletions: 1,
+              finding_lines: [2], // has findings → should be open
+            },
+          ],
+        },
+        BOILERPLATE_GROUP,
+      ],
+    };
+    renderViewer(diffWiringWithFindings);
+    // The wiring file card should be open because finding_lines.length > 0
+    // diff line content should be visible
+    expect(screen.getByText("route1")).toBeInTheDocument();
   });
 });

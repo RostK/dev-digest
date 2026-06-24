@@ -96,4 +96,13 @@ export const s = {
     flexDirection: "column",
     gap: 10,
   } satisfies CSSProperties,
+
+  /** Colored square bullet before the role label. */
+  roleBullet: {
+    display: "inline-block",
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    flexShrink: 0,
+  } satisfies CSSProperties,
 } as const;

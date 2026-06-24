@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { classifyFile, composeSmartDiff } from './smart-diff.js';
+import { classifyFile, composeSmartDiff, summarizeFile } from './smart-diff.js';
 import { SPLIT_TOO_BIG_LINES } from './smart-diff-constants.js';
+import type { Intent } from '@devdigest/shared';
 
 // ---------------------------------------------------------------------------
 // classifyFile
@@ -83,6 +84,24 @@ describe('classifyFile — core (default)', () => {
   });
 });
 
+describe('classifyFile — test/spec files → boilerplate', () => {
+  it.each([
+    'foo.test.ts',
+    'bar.spec.tsx',
+    '__tests__/x.ts',
+    'test/ratelimit.test.ts',
+    'src/__tests__/auth.test.ts',
+    'src/api/users.spec.ts',
+    'lib/utils.test.js',
+  ])('"%s" → boilerplate', (path) => {
+    expect(classifyFile(path)).toBe('boilerplate');
+  });
+
+  it('src/api/users.ts stays core (not a test file)', () => {
+    expect(classifyFile('src/api/users.ts')).toBe('core');
+  });
+});
+
 describe('classifyFile — Windows backslash paths normalised', () => {
   it('src\\api\\users.ts → core', () => {
     expect(classifyFile('src\\api\\users.ts')).toBe('core');
@@ -92,6 +111,96 @@ describe('classifyFile — Windows backslash paths normalised', () => {
   });
   it('src\\index.ts → wiring', () => {
     expect(classifyFile('src\\index.ts')).toBe('wiring');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// summarizeFile
+// ---------------------------------------------------------------------------
+
+const SAMPLE_INTENT: Intent = {
+  intent: 'Add rate limiting to public API endpoints',
+  in_scope: [
+    'webhook forwarding and callback handling',
+    'rate limiting middleware implementation',
+    'user list endpoint performance',
+    'configuration and secrets management',
+  ],
+  out_of_scope: ['database migrations', 'authentication'],
+};
+
+describe('summarizeFile — matching', () => {
+  it('picks the best-matching in_scope entry for a webhook file', () => {
+    const result = summarizeFile('src/api/public/webhooks.ts', SAMPLE_INTENT);
+    expect(result).toBe('webhook forwarding and callback handling');
+  });
+
+  it('picks the rate-limiting entry for the middleware file', () => {
+    const result = summarizeFile('src/middleware/ratelimit.ts', SAMPLE_INTENT);
+    expect(result).toBe('rate limiting middleware implementation');
+  });
+
+  it('picks the config entry for src/config.ts', () => {
+    const result = summarizeFile('src/config.ts', SAMPLE_INTENT);
+    expect(result).toBe('configuration and secrets management');
+  });
+});
+
+describe('summarizeFile — no match / null intent', () => {
+  it('returns null when intent is null', () => {
+    expect(summarizeFile('src/api/webhooks.ts', null)).toBeNull();
+  });
+
+  it('returns null when intent is undefined', () => {
+    expect(summarizeFile('src/api/webhooks.ts', undefined)).toBeNull();
+  });
+
+  it('returns null when in_scope is empty', () => {
+    const emptyIntent: Intent = { intent: 'x', in_scope: [], out_of_scope: [] };
+    expect(summarizeFile('src/api/webhooks.ts', emptyIntent)).toBeNull();
+  });
+
+  it('returns null when no token overlap exists', () => {
+    const result = summarizeFile('src/completely/unrelated/module.ts', SAMPLE_INTENT);
+    expect(result).toBeNull();
+  });
+});
+
+describe('composeSmartDiff — pseudocode_summary from intent', () => {
+  it('fills pseudocode_summary from the best-matching in_scope entry', () => {
+    const files = [
+      { path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6 },
+    ];
+    const result = composeSmartDiff(files, [], SAMPLE_INTENT);
+    const file = result.groups[0]!.files[0]!;
+    expect(file.pseudocode_summary).toBe('webhook forwarding and callback handling');
+  });
+
+  it('leaves pseudocode_summary null when intent is null', () => {
+    const files = [
+      { path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6 },
+    ];
+    const result = composeSmartDiff(files, [], null);
+    const file = result.groups[0]!.files[0]!;
+    expect(file.pseudocode_summary).toBeNull();
+  });
+
+  it('leaves pseudocode_summary null when called without the intent arg (2-arg compat)', () => {
+    const files = [
+      { path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6 },
+    ];
+    const result = composeSmartDiff(files, []);
+    const file = result.groups[0]!.files[0]!;
+    expect(file.pseudocode_summary).toBeNull();
+  });
+
+  it('returns null summary for a file with no token overlap to any in_scope', () => {
+    const files = [
+      { path: 'src/completely/unrelated/xyz.ts', additions: 5, deletions: 0 },
+    ];
+    const result = composeSmartDiff(files, [], SAMPLE_INTENT);
+    const file = result.groups[0]!.files[0]!;
+    expect(file.pseudocode_summary).toBeNull();
   });
 });
 

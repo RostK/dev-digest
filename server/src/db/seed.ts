@@ -112,7 +112,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         headSha: 'a1b2c3d4e5f6',
         additions: 247,
         deletions: 38,
-        filesCount: 9,
+        filesCount: 10,
         status: 'needs_review',
         body: 'Add rate limiting to public API endpoints to prevent abuse from unauthenticated clients.',
       })
@@ -142,6 +142,20 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
           '+  }',
           '+  return next();',
           '+}',
+          '+',
+          '@@ -55,0 +67,12 @@ function limitFor(req: Req): number {',
+          '+function bucketKey(req: Req): string {',
+          '+  // Uses X-Forwarded-For header directly — not validated, can be spoofed',
+          '+  const ip = req.headers["x-forwarded-for"] ?? req.socket.remoteAddress;',
+          '+  return `rl:${req.path}:${ip}`;',
+          '+}',
+          '+',
+          '+export function resetLimit(req: Req): Promise<void> {',
+          '+  // No auth check — any caller can reset any bucket',
+          '+  const key = bucketKey(req);',
+          '+  return redis.del(key).then(() => undefined);',
+          '+}',
+          '+',
         ].join('\n'),
       },
       {
@@ -157,6 +171,21 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
           '+  await fetch(target, { headers: { Authorization: token } });',
           '   return res.status(202).end();',
           ' }',
+          '@@ -80,0 +82,14 @@ export async function retryWebhook(id: string) {',
+          '+  const event = await db.events.find(id);',
+          '+  // callback_url not re-validated — SSRF on retry path',
+          '+  const target = event.callbackUrl;',
+          '+  const account = await db.accounts.find(event.accountId);',
+          '+  const token = account.apiToken;',
+          '+  // token forwarded to external host without scheme validation',
+          '+  await fetch(target, {',
+          '+    method: "POST",',
+          '+    headers: { Authorization: token, "Content-Type": "application/json" },',
+          '+    body: JSON.stringify(event.payload),',
+          '+  });',
+          '+}',
+          '+',
+          '+export const webhookSecret = process.env.WEBHOOK_SECRET ?? "hardcoded-fallback-secret";',
         ].join('\n'),
       },
       {
@@ -293,6 +322,23 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
           '+  ON "rate_limits" ("window_start");',
         ].join('\n'),
       },
+      // ---- boilerplate (test file) ----
+      {
+        prId: pr!.id,
+        path: 'test/ratelimit.test.ts',
+        additions: 6,
+        deletions: 0,
+        patch: [
+          '@@ -0,0 +1,6 @@',
+          '+import { describe, it, expect } from "vitest";',
+          '+import { rateLimit } from "../src/middleware/ratelimit";',
+          '+describe("rateLimit middleware", () => {',
+          '+  it("returns 429 when limit exceeded", async () => {',
+          '+    expect(true).toBe(true); // placeholder',
+          '+  });',
+          '+});',
+        ].join('\n'),
+      },
     ]);
 
     // pr_commits
@@ -319,6 +365,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .returning();
 
     await db.insert(t.findings).values([
+      // ---- src/config.ts (wiring) ----
       {
         reviewId: review!.id,
         file: 'src/config.ts',
@@ -327,21 +374,124 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         severity: 'CRITICAL',
         category: 'security',
         title: 'Hardcoded Stripe secret key in commit',
-        rationale: 'Line 12 contains a literal `sk_live_` Stripe secret key.',
-        suggestion: 'Move to env var and rotate the key immediately.',
+        rationale:
+          'Line 12 contains a literal `sk_live_` Stripe secret key committed to source control. ' +
+          'Anyone with repo access can extract it.',
+        suggestion: 'Remove the key from code, store it in an env var, and rotate the key immediately.',
         confidence: 0.98,
       },
+      // ---- src/api/users.ts (core) ----
       {
         reviewId: review!.id,
         file: 'src/api/users.ts',
         startLine: 45,
-        endLine: 52,
+        endLine: 49,
         severity: 'WARNING',
         category: 'perf',
         title: 'N+1 query in user list endpoint',
-        rationale: 'Loop issues one query per user → N+1.',
-        suggestion: 'Use a single IN query and group in memory.',
+        rationale:
+          'The loop on line 45 calls `db.orders.findByUser(u.id)` once per user, ' +
+          'producing N+1 database round-trips as the user count grows.',
+        suggestion: 'Fetch all orders in one `IN` query keyed on user IDs, then group in memory.',
         confidence: 0.86,
+      },
+      {
+        reviewId: review!.id,
+        file: 'src/api/users.ts',
+        startLine: 47,
+        endLine: 47,
+        severity: 'WARNING',
+        category: 'perf',
+        title: 'Per-user order query missing index on user_id',
+        rationale:
+          '`db.orders.findByUser(u.id)` scans orders without a confirmed index on `user_id`, ' +
+          'causing a full table scan on every iteration.',
+        suggestion: 'Add `CREATE INDEX orders_user_id_idx ON orders (user_id)` and batch the lookup.',
+        confidence: 0.79,
+      },
+      // ---- src/middleware/ratelimit.ts (core) ----
+      {
+        reviewId: review!.id,
+        file: 'src/middleware/ratelimit.ts',
+        startLine: 27,
+        endLine: 27,
+        severity: 'SUGGESTION',
+        category: 'correctness',
+        title: 'Race condition in counter expiry (TOCTOU)',
+        rationale:
+          'Lines 26-27 increment the key then conditionally set expiry only when count === 1. ' +
+          'Under concurrent requests the count may never equal 1 and the key never expires, ' +
+          'leaving the bucket permanently blocked.',
+        suggestion:
+          'Use `INCR` + `EXPIRE` in a single Redis pipeline or Lua script to make the operation atomic.',
+        confidence: 0.82,
+      },
+      {
+        reviewId: review!.id,
+        file: 'src/middleware/ratelimit.ts',
+        startLine: 69,
+        endLine: 69,
+        severity: 'WARNING',
+        category: 'security',
+        title: 'X-Forwarded-For header used without validation (IP spoofing)',
+        rationale:
+          'Line 69 reads `x-forwarded-for` directly from the request headers to build the rate-limit ' +
+          'bucket key. An attacker can set this header to any value, trivially bypassing per-IP limits.',
+        suggestion:
+          'Only trust `x-forwarded-for` when the upstream proxy is trusted. ' +
+          'Configure a trusted-proxy list (e.g. fastify `trustProxy`) and use the parsed `req.ip`.',
+        confidence: 0.91,
+      },
+      // ---- src/api/public/webhooks.ts (core) ----
+      {
+        reviewId: review!.id,
+        file: 'src/api/public/webhooks.ts',
+        startLine: 60,
+        endLine: 61,
+        severity: 'CRITICAL',
+        category: 'security',
+        title: 'SSRF + secret token forwarded to attacker-controlled URL',
+        rationale:
+          'Lines 60-61 read `callback_url` from the request body without validation and use it as the ' +
+          'fetch target, while also forwarding the account\'s `apiToken` in the Authorization header. ' +
+          'An attacker can supply an internal URL (e.g. `http://169.254.169.254/`) to perform SSRF ' +
+          'and simultaneously exfiltrate the token to an external host.',
+        suggestion:
+          'Validate `callback_url` against an allowlist of schemes (https only) and trusted domains. ' +
+          'Never forward internal auth tokens to external endpoints.',
+        confidence: 0.97,
+      },
+      {
+        reviewId: review!.id,
+        file: 'src/api/public/webhooks.ts',
+        startLine: 84,
+        endLine: 88,
+        severity: 'CRITICAL',
+        category: 'security',
+        title: 'SSRF on webhook retry path — callback URL not re-validated',
+        rationale:
+          'The retry handler at line 84 reloads `callbackUrl` from the DB and immediately fetches it, ' +
+          'with no URL validation. If a stored URL was tampered with (or stored before validation existed), ' +
+          'the retry path bypasses all controls.',
+        suggestion:
+          'Re-validate the stored URL against the same allowlist on every use, not just on creation.',
+        confidence: 0.94,
+      },
+      {
+        reviewId: review!.id,
+        file: 'src/api/public/webhooks.ts',
+        startLine: 94,
+        endLine: 94,
+        severity: 'CRITICAL',
+        category: 'security',
+        title: 'Hardcoded fallback webhook secret',
+        rationale:
+          'Line 94 falls back to the literal string `"hardcoded-fallback-secret"` when ' +
+          '`WEBHOOK_SECRET` is unset. Any environment without this env var silently uses a known key.',
+        suggestion:
+          'Require `WEBHOOK_SECRET` at startup and throw `ConfigError` when it is absent — ' +
+          'never fall back to a hardcoded value.',
+        confidence: 0.99,
       },
     ]);
   }

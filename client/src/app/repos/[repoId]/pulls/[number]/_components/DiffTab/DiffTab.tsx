@@ -3,10 +3,21 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SectionLabel, Button } from "@devdigest/ui";
-import { DiffViewer, SmartDiffViewer, type DiffCommentApi } from "@/components/diff-viewer";
-import { usePrComments, useCreatePrComment, usePrSmartDiff } from "@/lib/hooks/reviews";
+import {
+  DiffViewer,
+  SmartDiffViewer,
+  type DiffCommentApi,
+} from "@/components/diff-viewer";
+import type { FindingsBySeverity } from "@/components/diff-viewer/SmartDiffViewer/SmartDiffViewer";
+import {
+  usePrComments,
+  useCreatePrComment,
+  usePrSmartDiff,
+  usePrReviews,
+} from "@/lib/hooks/reviews";
+import { latestReviewsPerAgent } from "@/components/SeverityIndicators/helpers";
 import { notify } from "@/lib/toast";
-import type { PrFile } from "@devdigest/shared";
+import type { PrFile, Severity } from "@devdigest/shared";
 
 interface DiffTabProps {
   prId: string | null;
@@ -18,11 +29,47 @@ interface DiffTabProps {
 
 type ViewMode = "smart" | "original";
 
+/**
+ * Build a per-file, per-line severity map from the latest review per agent.
+ * Uses only non-dismissed findings, keeping the most severe value per line.
+ */
+function buildFindingsBySeverity(reviews: ReturnType<typeof usePrReviews>["data"]): FindingsBySeverity {
+  const map: FindingsBySeverity = new Map();
+  if (!reviews) return map;
+
+  const latest = latestReviewsPerAgent(reviews);
+  for (const review of latest) {
+    for (const finding of review.findings) {
+      if (finding.dismissed_at) continue;
+      const { file, start_line, severity } = finding;
+      if (!file || start_line == null) continue;
+
+      if (!map.has(file)) map.set(file, new Map());
+      const fileMap = map.get(file)!;
+
+      // Keep most severe per line (CRITICAL > WARNING > SUGGESTION)
+      const existing = fileMap.get(start_line);
+      if (!existing || severityRank(severity) > severityRank(existing)) {
+        fileMap.set(start_line, severity);
+      }
+    }
+  }
+  return map;
+}
+
+function severityRank(s: Severity): number {
+  if (s === "CRITICAL") return 3;
+  if (s === "WARNING") return 2;
+  return 1;
+}
+
 export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
   const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
   const { data: smartDiff } = usePrSmartDiff(prId);
+  const { data: reviews } = usePrReviews(prId);
+
   // Comments start hidden so the diff is clean by default — toggle to reveal.
   const [showComments, setShowComments] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<ViewMode>("smart");
@@ -45,6 +92,12 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
       }
     },
   };
+
+  // Build the per-file severity map once reviews are loaded
+  const findingsBySeverity = React.useMemo(
+    () => buildFindingsBySeverity(reviews),
+    [reviews],
+  );
 
   const isSmartMode = viewMode === "smart" && !!smartDiff;
   const sectionTitle = isSmartMode
@@ -92,7 +145,12 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
         {sectionTitle}
       </SectionLabel>
       {isSmartMode ? (
-        <SmartDiffViewer files={files} smartDiff={smartDiff} commenting={commenting} />
+        <SmartDiffViewer
+          files={files}
+          smartDiff={smartDiff}
+          commenting={commenting}
+          findingsBySeverity={findingsBySeverity}
+        />
       ) : (
         <DiffViewer files={files} commenting={commenting} />
       )}

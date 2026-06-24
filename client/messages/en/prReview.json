@@ -57,7 +57,7 @@
     "blockers": " · {count} blockers"
   },
   "smartDiff": {
-    "coreLabel": "Core",
+    "coreLabel": "Core logic",
     "wiringLabel": "Wiring",
     "boilerplateLabel": "Boilerplate",
     "coreDesc": "The substance of the change — review closely",
@@ -71,7 +71,12 @@
     "smartOrder": "Smart order",
     "originalOrder": "Original order",
     "reviewerOrdered": "Reviewer-ordered diff",
-    "findingsBadge": "{count} findings"
+    "findingsBadge": "{count} findings",
+    "summaryPill": "summary",
+    "whatThisDoes": "What this does:",
+    "sevBlocker": "blocker",
+    "sevWarning": "warning",
+    "sevSuggestion": "suggestion"
   },
   "list": {
     "breadcrumb": "Pull Requests",

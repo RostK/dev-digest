@@ -191,9 +191,10 @@ export class ReviewService {
     const pull = await this.repo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
 
-    const [files, reviewRows] = await Promise.all([
+    const [files, reviewRows, storedIntent] = await Promise.all([
       this.repo.getPrFiles(prId),
       this.repo.reviewsForPull(prId),
+      this.repo.getIntent(prId),
     ]);
 
     // Pick the newest review per agentId (reviewsForPull is newest-first, so
@@ -216,6 +217,7 @@ export class ReviewService {
     return composeSmartDiff(
       files.map((f) => ({ path: f.path, additions: f.additions, deletions: f.deletions })),
       findings,
+      storedIntent ?? null,
     );
   }
 

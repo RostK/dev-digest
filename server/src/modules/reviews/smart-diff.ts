@@ -5,13 +5,87 @@
  * the style of helpers.ts. Import this from the service; never call it from
  * routes.
  */
-import type { SmartDiff, SmartDiffFile, SmartDiffGroup, SmartDiffRole } from '@devdigest/shared';
+import type { Intent, SmartDiff, SmartDiffFile, SmartDiffGroup, SmartDiffRole } from '@devdigest/shared';
 import {
   BOILERPLATE_PATTERNS,
   WIRING_PATTERNS,
   SPLIT_TOO_BIG_LINES,
   SPLIT_DIR_DEPTH,
 } from './smart-diff-constants.js';
+
+// ---------------------------------------------------------------------------
+// Stopword list for intent matching (prepositions, articles, conjunctions).
+// ---------------------------------------------------------------------------
+const STOPWORDS = new Set([
+  'the', 'a', 'and', 'of', 'to', 'in', 'for', 'with', 'on', 'by', 'into',
+  'that', 'this',
+]);
+
+/**
+ * Tokenize a string into lowercased words, dropping stopwords and single-
+ * character tokens. Splits on whitespace, slash, dot, dash, and underscore so
+ * it works on both natural-language descriptions and file paths.
+ */
+function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[\s/.\-_]+/)
+    .filter((w) => w.length > 1 && !STOPWORDS.has(w));
+}
+
+/**
+ * Return true when two tokens are "equivalent" for matching purposes:
+ * exact equality, or one is a prefix of the other (handles
+ * "webhook" / "webhooks", "config" / "configuration", etc.).
+ */
+function tokensMatch(a: string, b: string): boolean {
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+/**
+ * Pick the `in_scope` area string that best matches the file path.
+ *
+ * Algorithm:
+ *   1. Tokenize each `in_scope` entry (drop short words / stopwords).
+ *   2. Tokenize the file path (split on / . - _; take all segments incl.
+ *      filename stem).
+ *   3. Score = number of token pairs where one is a prefix of the other
+ *      (handles "webhooks" ↔ "webhook", "config" ↔ "configuration", etc.).
+ *   4. Return the highest-scoring entry if score ≥ 1; else null.
+ *
+ * Returns null when intent is null/empty or nothing matches.
+ */
+export function summarizeFile(
+  path: string,
+  intent: Intent | null | undefined,
+): string | null {
+  if (!intent || intent.in_scope.length === 0) return null;
+
+  const pathTokens = tokenize(path);
+  if (pathTokens.length === 0) return null;
+
+  let bestEntry: string | null = null;
+  let bestScore = 0;
+
+  for (const entry of intent.in_scope) {
+    const entryTokens = tokenize(entry);
+    let score = 0;
+    for (const et of entryTokens) {
+      for (const pt of pathTokens) {
+        if (tokensMatch(et, pt)) {
+          score++;
+          break; // count each entry token at most once
+        }
+      }
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestEntry = entry;
+    }
+  }
+
+  return bestScore >= 1 ? bestEntry : null;
+}
 
 /**
  * Classify a file path into a SmartDiffRole.
@@ -50,6 +124,8 @@ function dirPrefix(path: string, depth: number): string {
  *
  * files    — { path, additions, deletions } (from pr_files)
  * findings — { file, start_line } (de-duplicated across agents by the caller)
+ * intent   — stored PR intent; used to fill pseudocode_summary via
+ *            summarizeFile (optional — existing 2-arg callers stay valid).
  *
  * Group order in the output: core → wiring → boilerplate (empty groups omitted).
  * Within a group files are ordered: has-findings desc, then change-size desc,
@@ -58,6 +134,7 @@ function dirPrefix(path: string, depth: number): string {
 export function composeSmartDiff(
   files: { path: string; additions: number; deletions: number }[],
   findings: { file: string; start_line: number }[],
+  intent?: Intent | null,
 ): SmartDiff {
   // Build a map of path → sorted-unique finding lines.
   const findingsByPath = new Map<string, Set<number>>();
@@ -83,7 +160,7 @@ export function composeSmartDiff(
     const finding_lines = lines ? [...lines].sort((a, b) => a - b) : [];
     byRole[role].push({
       path: file.path,
-      pseudocode_summary: null,
+      pseudocode_summary: summarizeFile(file.path, intent ?? null),
       additions: file.additions,
       deletions: file.deletions,
       finding_lines,

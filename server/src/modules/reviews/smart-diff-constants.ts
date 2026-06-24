@@ -38,6 +38,10 @@ export const BOILERPLATE_PATTERNS: RegExp[] = [
   /\.map$/,
   // generated SQL migrations (top-level or nested)
   /(?:^|\/)migrations\/[^/]+\.sql$/,
+  // test / spec files — unit tests are mechanical, not business logic
+  /(?:^|\/)__tests__\//,
+  /(?:^|\/)tests?\//,
+  /\.(test|spec)\.[tj]sx?$/,
 ];
 
 export const WIRING_PATTERNS: RegExp[] = [
