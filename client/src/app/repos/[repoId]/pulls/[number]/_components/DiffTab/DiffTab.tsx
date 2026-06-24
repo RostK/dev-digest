@@ -17,7 +17,7 @@ import {
 } from "@/lib/hooks/reviews";
 import { latestReviewsPerAgent } from "@/components/SeverityIndicators/helpers";
 import { notify } from "@/lib/toast";
-import type { PrFile, Severity } from "@devdigest/shared";
+import type { PrFile, FindingRecord } from "@devdigest/shared";
 
 interface DiffTabProps {
   prId: string | null;
@@ -30,10 +30,11 @@ interface DiffTabProps {
 type ViewMode = "smart" | "original";
 
 /**
- * Build a per-file, per-line severity map from the latest review per agent.
- * Uses only non-dismissed findings, keeping the most severe value per line.
+ * Build a per-file map of FindingRecord[] from the latest review per agent.
+ * Uses only non-dismissed findings. The full records are passed down so
+ * clicking a severity badge can reveal inline finding details (InlineFinding).
  */
-function buildFindingsBySeverity(reviews: ReturnType<typeof usePrReviews>["data"]): FindingsBySeverity {
+function buildFindingsByPath(reviews: ReturnType<typeof usePrReviews>["data"]): FindingsBySeverity {
   const map: FindingsBySeverity = new Map();
   if (!reviews) return map;
 
@@ -41,26 +42,14 @@ function buildFindingsBySeverity(reviews: ReturnType<typeof usePrReviews>["data"
   for (const review of latest) {
     for (const finding of review.findings) {
       if (finding.dismissed_at) continue;
-      const { file, start_line, severity } = finding;
+      const { file, start_line } = finding;
       if (!file || start_line == null) continue;
 
-      if (!map.has(file)) map.set(file, new Map());
-      const fileMap = map.get(file)!;
-
-      // Keep most severe per line (CRITICAL > WARNING > SUGGESTION)
-      const existing = fileMap.get(start_line);
-      if (!existing || severityRank(severity) > severityRank(existing)) {
-        fileMap.set(start_line, severity);
-      }
+      if (!map.has(file)) map.set(file, []);
+      map.get(file)!.push(finding as FindingRecord);
     }
   }
   return map;
-}
-
-function severityRank(s: Severity): number {
-  if (s === "CRITICAL") return 3;
-  if (s === "WARNING") return 2;
-  return 1;
 }
 
 export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
@@ -93,9 +82,9 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
     },
   };
 
-  // Build the per-file severity map once reviews are loaded
+  // Build the per-file findings map once reviews are loaded
   const findingsBySeverity = React.useMemo(
-    () => buildFindingsBySeverity(reviews),
+    () => buildFindingsByPath(reviews),
     [reviews],
   );
 

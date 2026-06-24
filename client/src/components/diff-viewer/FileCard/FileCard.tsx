@@ -5,7 +5,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
-import type { Severity } from "@devdigest/shared";
+import type { Severity, FindingRecord } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
 import { parsePatch, type Line } from "../helpers";
@@ -24,6 +24,8 @@ import { OutdatedComments } from "../OutdatedComments";
 export interface FileFinding {
   line: number;
   severity: Severity;
+  /** Full FindingRecord(s) for this line — present when a real review backs the line. */
+  findings?: FindingRecord[];
 }
 
 /** Findings badge shown in the FileCard header when findings are present.
@@ -195,10 +197,10 @@ export function FileCard({
   const hasCritical = effectiveFindings.some((f) => f.severity === "CRITICAL");
   const statusDotColor = hasCritical ? "var(--crit)" : "var(--warn)";
 
-  // Build a per-line lookup for severity in O(1)
-  const severityByLine = React.useMemo(() => {
-    const map = new Map<number, Severity>();
-    for (const f of effectiveFindings) map.set(f.line, f.severity);
+  // Build a per-line lookup for severity + full records in O(1)
+  const findingsByLine = React.useMemo(() => {
+    const map = new Map<number, { severity: Severity; findings?: FindingRecord[] }>();
+    for (const f of effectiveFindings) map.set(f.line, { severity: f.severity, findings: f.findings });
     return map;
   }, [effectiveFindings]);
 
@@ -267,7 +269,7 @@ export function FileCard({
               const anchorId = isHighlight && ln.newNo != null
                 ? `sd-${file.path}-L${ln.newNo}`
                 : undefined;
-              const lineSeverity = ln.newNo != null ? severityByLine.get(ln.newNo) : undefined;
+              const lineEntry = ln.newNo != null ? findingsByLine.get(ln.newNo) : undefined;
               return (
                 <CodeLine
                   key={i}
@@ -277,7 +279,8 @@ export function FileCard({
                   commenting={commenting}
                   highlight={isHighlight}
                   anchorId={anchorId}
-                  severity={isHighlight ? lineSeverity : undefined}
+                  severity={isHighlight ? lineEntry?.severity : undefined}
+                  findings={isHighlight ? lineEntry?.findings : undefined}
                 />
               );
             })

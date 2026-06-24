@@ -1,5 +1,7 @@
 /* CodeLine — one rendered diff line: gutter number, +/- sign, text, plus the
-   hover "+" affordance, any anchored comment threads, and an inline composer. */
+   hover "+" affordance, any anchored comment threads, and an inline composer.
+   When a finding's severity badge is clicked, InlineFinding cards expand below
+   the line (one per finding on that line). */
 "use client";
 
 import React from "react";
@@ -9,7 +11,8 @@ import { type Line } from "../helpers";
 import { s, lineRowFor, lineSignFor } from "../styles";
 import { CommentThreadView } from "../CommentThreadView";
 import { InlineComposer } from "../InlineComposer";
-import type { Severity } from "@devdigest/shared";
+import { InlineFinding } from "../InlineFinding";
+import type { Severity, FindingRecord } from "@devdigest/shared";
 
 /** Token color + label per severity level. */
 const SEVERITY_DISPLAY: Record<
@@ -21,12 +24,31 @@ const SEVERITY_DISPLAY: Record<
   SUGGESTION: { labelKey: "smartDiff.sevSuggestion", color: "var(--sugg, var(--info, #6b7280))" },
 };
 
-/** Inline right-aligned severity badge rendered on a highlighted finding line. */
-function SeverityBadge({ severity }: { severity: Severity }) {
+/**
+ * Clickable severity badge that toggles the InlineFinding card(s) below.
+ * Isolated component so useTranslations("prReview") is only called when
+ * a finding line is actually rendered (keeps the smoke test clean).
+ */
+function SeverityBadge({
+  severity,
+  expanded,
+  onToggle,
+}: {
+  severity: Severity;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const t = useTranslations("prReview");
   const { labelKey, color } = SEVERITY_DISPLAY[severity];
   return (
-    <span
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-label={t("smartDiff.findingDetails")}
+      onClick={(e) => {
+        e.stopPropagation();
+        onToggle();
+      }}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -42,10 +64,11 @@ function SeverityBadge({ severity }: { severity: Severity }) {
         flexShrink: 0,
         letterSpacing: "0.03em",
         textTransform: "uppercase",
+        cursor: "pointer",
       }}
     >
       {t(labelKey)}
-    </span>
+    </button>
   );
 }
 
@@ -57,6 +80,7 @@ export function CodeLine({
   highlight,
   anchorId,
   severity,
+  findings,
 }: {
   ln: Line;
   path: string;
@@ -68,9 +92,13 @@ export function CodeLine({
   anchorId?: string;
   /** Severity of the finding on this line — renders an inline badge when set. */
   severity?: Severity;
+  /** Full FindingRecord(s) for this line — when present, clicking the badge
+   *  expands inline detail cards below the line. */
+  findings?: FindingRecord[];
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
+  const [findingsOpen, setFindingsOpen] = React.useState(false);
 
   if (ln.kind === "hunk") {
     return (
@@ -87,6 +115,9 @@ export function CodeLine({
   const highlightStyle: React.CSSProperties = highlight
     ? { borderLeft: "3px solid var(--accent)", background: "var(--accent-bg, rgba(99,102,241,.08))" }
     : {};
+
+  const hasFindings = highlight && severity;
+  const hasFullFindings = hasFindings && findings && findings.length > 0;
 
   return (
     <div
@@ -116,9 +147,37 @@ export function CodeLine({
         <span className="mono" style={{ ...s.lineText, flex: 1 }}>
           {ln.text || " "}
         </span>
-        {/* Inline severity badge — right-aligned, shown on finding lines */}
-        {highlight && severity && <SeverityBadge severity={severity} />}
+        {/* Clickable severity badge — right-aligned, shown on finding lines.
+            When full FindingRecord(s) are present it toggles inline cards;
+            otherwise it is a non-interactive label (no toggle handler). */}
+        {hasFindings && (
+          hasFullFindings ? (
+            <SeverityBadge
+              severity={severity}
+              expanded={findingsOpen}
+              onToggle={() => setFindingsOpen((v) => !v)}
+            />
+          ) : (
+            /* Fallback: no full records available — render as plain label */
+            <SeverityLabel severity={severity} />
+          )
+        )}
       </div>
+
+      {/* Inline finding cards — rendered directly below the line row */}
+      {hasFullFindings && findingsOpen && (
+        <div
+          style={{
+            padding: "6px 12px 6px 16px",
+            background: "var(--bg-surface)",
+            borderTop: "1px solid var(--border)",
+          }}
+        >
+          {findings.map((f) => (
+            <InlineFinding key={f.id} finding={f} />
+          ))}
+        </div>
+      )}
 
       {commenting &&
         commenting.showComments &&
@@ -136,5 +195,37 @@ export function CodeLine({
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Non-interactive severity label — shown when a line has severity but no full
+ * FindingRecord (e.g. severity derived from smart-diff's finding_lines fallback).
+ * Isolated so useTranslations("prReview") is only called on finding lines.
+ */
+function SeverityLabel({ severity }: { severity: Severity }) {
+  const t = useTranslations("prReview");
+  const { labelKey, color } = SEVERITY_DISPLAY[severity];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "1px 6px",
+        borderRadius: 4,
+        fontSize: 10,
+        fontWeight: 700,
+        lineHeight: 1.5,
+        color,
+        background: "var(--bg-elevated, rgba(0,0,0,.06))",
+        border: `1px solid ${color}`,
+        marginLeft: "auto",
+        flexShrink: 0,
+        letterSpacing: "0.03em",
+        textTransform: "uppercase",
+      }}
+    >
+      {t(labelKey)}
+    </span>
   );
 }

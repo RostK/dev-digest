@@ -9,11 +9,13 @@
  * 5. Per-line severity badges render correctly ("blocker"/"warning"/"suggestion").
  * 6. "What this does" line appears when pseudocode_summary is set.
  * 7. Core files default open; wiring files open only when they have findings.
+ * 8. Clicking a severity badge reveals the finding title and rationale (InlineFinding).
+ * 9. Original-order path (no findingsBySeverity) renders no inline cards.
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { SmartDiff } from "@devdigest/shared";
+import type { SmartDiff, FindingRecord } from "@devdigest/shared";
 import type { PrFile } from "@devdigest/shared";
 import prReviewMessages from "../../../../messages/en/prReview.json";
 import shellMessages from "../../../../messages/en/shell.json";
@@ -101,6 +103,29 @@ const SMART_DIFF: SmartDiff = {
 };
 
 const ALL_PR_FILES: PrFile[] = [CORE_FILE, WIRING_FILE, BOILERPLATE_FILE];
+
+/** Minimal FindingRecord fixture for the inline card tests. */
+function makeFinding(overrides: Partial<FindingRecord> = {}): FindingRecord {
+  return {
+    id: "f1",
+    review_id: "r1",
+    severity: "WARNING",
+    category: "bug",
+    title: "Null pointer risk",
+    file: "src/core.ts",
+    start_line: 2,
+    end_line: 2,
+    rationale: "This line may throw when value is null.",
+    suggestion: "Add a null check before dereferencing.",
+    confidence: 0.9,
+    kind: "finding",
+    trifecta_components: null,
+    evidence: null,
+    accepted_at: null,
+    dismissed_at: null,
+    ...overrides,
+  };
+}
 
 function renderViewer(
   smartDiff: SmartDiff = SMART_DIFF,
@@ -202,15 +227,14 @@ describe("SmartDiffViewer", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  // ---- New: per-line severity badges ----
+  // ---- Per-line severity badges (derived from FindingsBySeverity = Map<path, FindingRecord[]>) ----
 
   it("renders a 'blocker' severity badge on a CRITICAL finding line", () => {
-    // Core file has finding_lines [2, 3]; map line 2 → CRITICAL
+    const finding = makeFinding({ severity: "CRITICAL", start_line: 2, end_line: 2 });
     const findingsBySeverity: FindingsBySeverity = new Map([
-      ["src/core.ts", new Map([[2, "CRITICAL"]])],
+      ["src/core.ts", [finding]],
     ]);
     renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
-
     // The core file opens by default (role === "core") so diff lines are visible
     // Line 2 of the patch is "+add1" (new-side line 2)
     // The severity badge should say "blocker"
@@ -218,19 +242,21 @@ describe("SmartDiffViewer", () => {
   });
 
   it("renders a 'warning' severity badge on a WARNING finding line", () => {
+    const finding = makeFinding({ severity: "WARNING", start_line: 2, end_line: 2 });
     const findingsBySeverity: FindingsBySeverity = new Map([
-      ["src/core.ts", new Map([[2, "WARNING"]])],
+      ["src/core.ts", [finding]],
     ]);
     renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
     expect(screen.getByText("warning")).toBeInTheDocument();
   });
 
   it("renders 'suggestion' severity badge(s) on SUGGESTION finding lines", () => {
+    const finding = makeFinding({ severity: "SUGGESTION", start_line: 2, end_line: 2 });
     const findingsBySeverity: FindingsBySeverity = new Map([
-      ["src/core.ts", new Map([[2, "SUGGESTION"]])],
+      ["src/core.ts", [finding]],
     ]);
     renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
-    // line 2 → SUGGESTION from the map; line 3 → SUGGESTION fallback from finding_lines
+    // line 2 → SUGGESTION from the finding; line 3 → SUGGESTION fallback from finding_lines
     const badges = screen.getAllByText("suggestion");
     expect(badges.length).toBeGreaterThan(0);
   });
@@ -370,5 +396,73 @@ describe("SmartDiffViewer", () => {
     // The wiring file card should be open because finding_lines.length > 0
     // diff line content should be visible
     expect(screen.getByText("route1")).toBeInTheDocument();
+  });
+
+  // ---- New: clicking a severity badge expands InlineFinding card ----
+
+  it("clicking a finding badge reveals the finding title and rationale", () => {
+    const finding = makeFinding({
+      severity: "WARNING",
+      start_line: 2,
+      end_line: 2,
+      title: "Null pointer risk",
+      rationale: "This line may throw when value is null.",
+    });
+    const findingsBySeverity: FindingsBySeverity = new Map([
+      ["src/core.ts", [finding]],
+    ]);
+    renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
+
+    // The badge is visible (line 2 of core.ts is rendered by default)
+    const badge = screen.getByRole("button", { name: /toggle finding details/i });
+    expect(badge).toBeInTheDocument();
+    // Finding details not yet shown
+    expect(screen.queryByText("Null pointer risk")).not.toBeInTheDocument();
+
+    // Click the badge → card expands
+    fireEvent.click(badge);
+    expect(screen.getByText("Null pointer risk")).toBeInTheDocument();
+    expect(screen.getByText(/This line may throw/)).toBeInTheDocument();
+  });
+
+  it("clicking the badge again collapses the InlineFinding card", () => {
+    const finding = makeFinding({ severity: "CRITICAL", start_line: 2, end_line: 2 });
+    const findingsBySeverity: FindingsBySeverity = new Map([
+      ["src/core.ts", [finding]],
+    ]);
+    renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
+
+    const badge = screen.getByRole("button", { name: /toggle finding details/i });
+    // Open
+    fireEvent.click(badge);
+    expect(screen.getByText("Null pointer risk")).toBeInTheDocument();
+    // Close
+    fireEvent.click(badge);
+    expect(screen.queryByText("Null pointer risk")).not.toBeInTheDocument();
+  });
+
+  it("when a line has a suggestion, 'Suggested fix' appears in the expanded card", () => {
+    const finding = makeFinding({
+      severity: "WARNING",
+      start_line: 2,
+      end_line: 2,
+      suggestion: "Add a null check before dereferencing.",
+    });
+    const findingsBySeverity: FindingsBySeverity = new Map([
+      ["src/core.ts", [finding]],
+    ]);
+    renderViewer(SMART_DIFF, ALL_PR_FILES, findingsBySeverity);
+
+    const badge = screen.getByRole("button", { name: /toggle finding details/i });
+    fireEvent.click(badge);
+    expect(screen.getByText("Suggested fix")).toBeInTheDocument();
+    expect(screen.getByText(/Add a null check/)).toBeInTheDocument();
+  });
+
+  it("original-order path (no findingsBySeverity) renders no inline finding cards", () => {
+    // Render without findingsBySeverity — simulates the DiffViewer path
+    renderViewer(SMART_DIFF, ALL_PR_FILES, undefined);
+    // No severity badges should be visible that could toggle cards
+    expect(screen.queryByRole("button", { name: /toggle finding details/i })).not.toBeInTheDocument();
   });
 });

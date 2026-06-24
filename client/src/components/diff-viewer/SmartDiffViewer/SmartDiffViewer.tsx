@@ -6,25 +6,23 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
-import type { SmartDiff, SmartDiffRole, Severity } from "@devdigest/shared";
+import type { SmartDiff, SmartDiffRole, FindingRecord, Severity } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
 import type { DiffCommentApi } from "../comments";
 import { FileCard } from "../FileCard";
+import type { FileFinding } from "../FileCard";
 import { s } from "./styles";
 
 /* ---------- types ---------- */
 
-/** Per-line severity info derived from review findings, keyed by new-side line number. */
-export type FileFindingMap = Map<number, Severity>;
-
-/** Per-file map of line → severity, keyed by file path. */
-export type FindingsBySeverity = Map<string, FileFindingMap>;
+/** Full findings (FindingRecord[]) keyed by file path. */
+export type FindingsBySeverity = Map<string, FindingRecord[]>;
 
 export interface SmartDiffViewerProps {
   files: PrFile[];
   smartDiff: SmartDiff;
   commenting?: DiffCommentApi;
-  /** Per-file, per-line severity from review findings. When omitted nothing changes. */
+  /** Per-file findings (full FindingRecord) from review data. When omitted nothing changes. */
   findingsBySeverity?: FindingsBySeverity;
 }
 
@@ -164,26 +162,52 @@ function RoleGroup({
   );
 }
 
+/** Severity ranking for tie-breaking when multiple findings are on the same line. */
+function severityRank(s: Severity): number {
+  if (s === "CRITICAL") return 3;
+  if (s === "WARNING") return 2;
+  return 1;
+}
+
 /**
  * Merge smart-diff finding_lines (which have no severity) with the review-derived
- * per-line severity map into a unified findings array for FileCard.
- * Lines in finding_lines but NOT in the severity map get severity "SUGGESTION" as
- * a safe fallback so the highlight still appears.
+ * per-file FindingRecord[] into a unified findings array for FileCard.
+ *
+ * Lines in finding_lines but NOT in fileFindings get severity "SUGGESTION" as a
+ * safe fallback so the highlight still appears. Lines that DO have FindingRecord[]
+ * carry the full records for the InlineFinding inline card toggle.
  */
-function buildFileFindings(
+export function buildFileFindings(
   findingLines: number[],
-  lineSeverityMap: FileFindingMap | undefined,
-): { line: number; severity: Severity }[] {
-  // Union of lines from both sources
-  const lineSet = new Set<number>(findingLines);
-  if (lineSeverityMap) {
-    for (const line of lineSeverityMap.keys()) lineSet.add(line);
+  fileFindings: FindingRecord[] | undefined,
+): FileFinding[] {
+  // Group full FindingRecord[] by start_line for O(1) lookup
+  const byLine = new Map<number, FindingRecord[]>();
+  if (fileFindings) {
+    for (const f of fileFindings) {
+      if (f.start_line == null) continue;
+      const existing = byLine.get(f.start_line) ?? [];
+      existing.push(f);
+      byLine.set(f.start_line, existing);
+    }
   }
 
-  return Array.from(lineSet).map((line) => ({
-    line,
-    severity: lineSeverityMap?.get(line) ?? "SUGGESTION",
-  }));
+  // Union of lines from both sources
+  const lineSet = new Set<number>(findingLines);
+  for (const line of byLine.keys()) lineSet.add(line);
+
+  return Array.from(lineSet).map((line) => {
+    const records = byLine.get(line);
+    // Most-severe severity for the badge color
+    const severity: Severity = records
+      ? records.reduce<Severity>(
+          (best, r) =>
+            severityRank(r.severity) > severityRank(best) ? r.severity : best,
+          "SUGGESTION",
+        )
+      : "SUGGESTION";
+    return { line, severity, findings: records };
+  });
 }
 
 /* ---------- SmartDiffViewer ---------- */

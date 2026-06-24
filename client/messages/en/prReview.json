@@ -76,7 +76,8 @@
     "whatThisDoes": "What this does:",
     "sevBlocker": "blocker",
     "sevWarning": "warning",
-    "sevSuggestion": "suggestion"
+    "sevSuggestion": "suggestion",
+    "findingDetails": "Toggle finding details"
   },
   "list": {
     "breadcrumb": "Pull Requests",
