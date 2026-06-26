@@ -1,0 +1,120 @@
+/**
+ * Compact mappers — pure transforms from API contract types to the lean shapes
+ * tools expose in their `outputSchema` / `structuredContent`.
+ *
+ * These mappers drop token-heavy fields (long strings, rarely-needed metadata)
+ * while keeping every field a model needs to reason about a review result.
+ *
+ * All @devdigest/shared imports are type-only: erased at runtime.
+ */
+
+import type {
+  Agent,
+  Finding,
+  FindingRecord,
+  ReviewRecord,
+  ConventionCandidate,
+} from '@devdigest/shared';
+
+// ---------------------------------------------------------------------------
+// Exported concise types — used by tools for output Zod schemas
+// ---------------------------------------------------------------------------
+
+/** Minimal agent descriptor (id, name, enabled). */
+export type AgentRef = {
+  id: string;
+  name: string;
+  enabled: boolean;
+};
+
+/**
+ * A single finding stripped down to the fields needed by the model.
+ * Drops: rationale, confidence, category, kind, trifecta_components, evidence.
+ */
+export type ConciseFinding = {
+  severity: Finding['severity'];
+  file: string;
+  start_line: number;
+  end_line: number;
+  title: string;
+  suggestion: Finding['suggestion'];
+};
+
+/**
+ * Compact review verdict shape.
+ * Drops: id, pr_id, agent_id, run_id, agent_name, kind, model, grounding,
+ *        created_at, and per-finding heavy fields.
+ */
+export type VerdictResult = {
+  verdict: ReviewRecord['verdict'];
+  summary: ReviewRecord['summary'];
+  score: ReviewRecord['score'];
+  findings_count: number;
+  findings: ConciseFinding[];
+};
+
+/**
+ * Compact convention shape.
+ * Drops: id, evidence_snippet (potentially large), confidence.
+ */
+export type ConventionRef = {
+  category: ConventionCandidate['category'];
+  rule: string;
+  evidence_path: string;
+  evidence_start_line: number | null | undefined;
+  evidence_end_line: number | null | undefined;
+  accepted: boolean;
+};
+
+// ---------------------------------------------------------------------------
+// Mappers
+// ---------------------------------------------------------------------------
+
+/** Map an Agent to its minimal ref (id, name, enabled). */
+export function toAgentRef(a: Agent): AgentRef {
+  return { id: a.id, name: a.name, enabled: a.enabled };
+}
+
+/**
+ * Map a Finding or FindingRecord to its concise shape.
+ * Shared fields are common to both types — no discriminant needed.
+ */
+export function toConciseFinding(f: Finding | FindingRecord): ConciseFinding {
+  return {
+    severity: f.severity,
+    file: f.file,
+    start_line: f.start_line,
+    end_line: f.end_line,
+    title: f.title,
+    suggestion: f.suggestion,
+  };
+}
+
+/**
+ * Map a ReviewRecord to a compact verdict shape.
+ * `findings_count` is derived from the length of the findings array.
+ */
+export function toVerdict(r: ReviewRecord): VerdictResult {
+  return {
+    verdict: r.verdict,
+    summary: r.summary,
+    score: r.score,
+    findings_count: r.findings.length,
+    findings: r.findings.map(toConciseFinding),
+  };
+}
+
+/**
+ * Map a ConventionCandidate to its lean transport shape.
+ * Drops `evidence_snippet` (can be a large code block) and `confidence`.
+ */
+export function toConvention(c: ConventionCandidate): ConventionRef {
+  return {
+    category: c.category,
+    rule: c.rule,
+    evidence_path: c.evidence_path,
+    evidence_start_line: c.evidence_start_line,
+    evidence_end_line: c.evidence_end_line,
+    accepted: c.accepted,
+  };
+}
