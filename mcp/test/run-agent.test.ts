@@ -247,7 +247,7 @@ describe('runAgentHandler — failed run', () => {
     );
 
     expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('run-fail');
     expect(text).toContain('OPENAI_API_KEY not set');
     expect(text).toContain('Settings');
@@ -278,7 +278,7 @@ describe('runAgentHandler — cancelled run', () => {
     );
 
     expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('cancelled');
     expect(text).toContain('run_agent_on_pull_request');
   });
@@ -310,7 +310,7 @@ describe('runAgentHandler — timeout', () => {
     );
 
     expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('still running');
     expect(text).toContain('get_findings');
   });
@@ -336,7 +336,7 @@ describe('runAgentHandler — no run returned', () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('review did not start');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('review did not start');
   });
 });
 
@@ -356,8 +356,8 @@ describe('runAgentHandler — resolve miss', () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('"acme/unknown"');
-    expect(result.content[0]?.text).toContain('acme/other');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('"acme/unknown"');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('acme/other');
   });
 
   it('returns isError:true when PR is not found', async () => {
@@ -372,7 +372,7 @@ describe('runAgentHandler — resolve miss', () => {
     );
 
     expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('#99');
     expect(text).toContain('10');
   });
@@ -390,7 +390,7 @@ describe('runAgentHandler — resolve miss', () => {
     );
 
     expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain("'agent-unknown'");
     expect(text).toContain('list_agents');
   });

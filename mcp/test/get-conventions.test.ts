@@ -52,9 +52,7 @@ function makeRepo(fullName: string, id = 'repo-uuid'): Repo {
 function makeConvention(rule: string): ConventionCandidate {
   return {
     id: `conv-${rule}`,
-    repo_id: 'repo-uuid',
-    workspace_id: 'ws-1',
-    category: 'Style',
+    category: 'style',
     rule,
     evidence_path: 'src/index.ts',
     evidence_start_line: 10,
@@ -62,7 +60,6 @@ function makeConvention(rule: string): ConventionCandidate {
     evidence_snippet: 'export function foo() {}',
     confidence: 0.9,
     accepted: true,
-    created_at: new Date().toISOString(),
   };
 }
 
@@ -107,7 +104,7 @@ describe('getConventionsHandler — success', () => {
     expect(first).not.toHaveProperty('evidence_snippet');
     expect(first).not.toHaveProperty('confidence');
     expect(first).toHaveProperty('rule', 'Use named exports');
-    expect(first).toHaveProperty('category', 'Style');
+    expect(first).toHaveProperty('category', 'style');
     expect(first).toHaveProperty('accepted', true);
   });
 
@@ -122,7 +119,7 @@ describe('getConventionsHandler — success', () => {
       { repo: 'acme/api' },
     );
 
-    expect(result.content[0]?.text).toContain('Prefer const');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('Prefer const');
   });
 });
 
@@ -143,7 +140,7 @@ describe('getConventionsHandler — empty list', () => {
     );
 
     expect(result.isError).toBeFalsy();
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('no conventions stored');
     expect(text).toContain('"acme/api"');
   });
@@ -180,7 +177,7 @@ describe('getConventionsHandler — resolve miss', () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('"acme/unknown"');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('"acme/unknown"');
   });
 
   it('does not throw — always returns a result', async () => {

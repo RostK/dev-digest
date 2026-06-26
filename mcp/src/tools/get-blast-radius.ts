@@ -13,6 +13,7 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool } from '../register.js';
 import type { ApiClient } from '../api-client.js';
 
 // ---------------------------------------------------------------------------
@@ -57,7 +58,8 @@ export async function getBlastRadiusHandler(
 // ---------------------------------------------------------------------------
 
 export function registerGetBlastRadius(server: McpServer, deps: HandlerDeps): void {
-  server.registerTool(
+  registerTool(
+    server,
     'get_blast_radius',
     {
       title: 'Get pull request blast radius',

@@ -77,7 +77,7 @@ describe('listAgentsHandler — success', () => {
 
     const result = await listAgentsHandler({ client, ...DEPS });
 
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('agent-abc');
   });
 });
@@ -93,7 +93,7 @@ describe('listAgentsHandler — empty list', () => {
     const result = await listAgentsHandler({ client, ...DEPS });
 
     expect(result.isError).toBeFalsy();
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('no agents configured');
     expect(text).toContain('list_agents');
   });
@@ -123,7 +123,7 @@ describe('listAgentsHandler — NetworkError', () => {
     const result = await listAgentsHandler({ client, ...DEPS });
 
     expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('is the server running');
     expect(text).toContain('http://localhost:3001');
   });
@@ -141,7 +141,7 @@ describe('listAgentsHandler — NetworkError', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('http://custom-host:9999');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('http://custom-host:9999');
   });
 });
 
@@ -160,6 +160,6 @@ describe('listAgentsHandler — never throws', () => {
     const result = await listAgentsHandler({ client, ...DEPS });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('Some unexpected crash');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('Some unexpected crash');
   });
 });

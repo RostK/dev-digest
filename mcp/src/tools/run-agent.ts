@@ -19,6 +19,7 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool } from '../register.js';
 import type { ApiClient } from '../api-client.js';
 import { ApiError, NetworkError } from '../api-client.js';
 import { ForwardError } from '../errors.js';
@@ -133,7 +134,8 @@ export async function runAgentHandler(
 // ---------------------------------------------------------------------------
 
 export function registerRunAgent(server: McpServer, deps: HandlerDeps): void {
-  server.registerTool(
+  registerTool(
+    server,
     'run_agent_on_pull_request',
     {
       title: 'Review a pull request',

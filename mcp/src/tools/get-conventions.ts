@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerTool } from '../register.js';
 import type { ApiClient } from '../api-client.js';
 import { ApiError, NetworkError } from '../api-client.js';
 import { ForwardError } from '../errors.js';
@@ -90,7 +91,8 @@ export async function getConventionsHandler(
 // ---------------------------------------------------------------------------
 
 export function registerGetConventions(server: McpServer, deps: HandlerDeps): void {
-  server.registerTool(
+  registerTool(
+    server,
     'get_conventions',
     {
       title: 'Get repository conventions',

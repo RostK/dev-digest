@@ -128,7 +128,7 @@ describe('getFindingsHandler — success', () => {
       { repo: 'acme/api', pr: 42 },
     );
 
-    expect(result.content[0]?.text).toContain('approve');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('approve');
   });
 });
 
@@ -150,7 +150,7 @@ describe('getFindingsHandler — no reviews', () => {
     );
 
     expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('no completed review');
     expect(text).toContain('"acme/api"');
     expect(text).toContain('#42');
@@ -174,7 +174,7 @@ describe('getFindingsHandler — resolve miss', () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('"acme/unknown"');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('"acme/unknown"');
   });
 
   it('returns isError:true when PR not found', async () => {
@@ -189,8 +189,8 @@ describe('getFindingsHandler — resolve miss', () => {
     );
 
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('#99');
-    expect(result.content[0]?.text).toContain('10');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('#99');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('10');
   });
 
   it('does not throw — always returns a result', async () => {

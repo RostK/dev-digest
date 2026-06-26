@@ -54,7 +54,7 @@ describe('getBlastRadiusHandler — always stub error', () => {
       { repo: 'acme/api', files: ['src/index.ts'] },
     );
 
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toContain('not implemented yet');
   });
 
@@ -66,7 +66,7 @@ describe('getBlastRadiusHandler — always stub error', () => {
       { repo: 'acme/api', files: [] },
     );
 
-    const text = result.content[0]?.text ?? '';
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
     expect(text).toMatch(/later lesson|repo-intel/i);
   });
 });
@@ -89,7 +89,7 @@ describe('getBlastRadiusHandler — never calls the client', () => {
 
     // Verify the result is the stub error, not a client-caused error.
     expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('not implemented yet');
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('not implemented yet');
 
     // Verify no client methods were called.
     expect(vi.mocked(client.listRepos)).not.toHaveBeenCalled();
