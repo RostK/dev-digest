@@ -5,6 +5,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
+import type { Severity, FindingRecord } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
 import { parsePatch, type Line } from "../helpers";
@@ -19,6 +20,112 @@ import { s, chevronFor } from "../styles";
 import { CodeLine } from "../CodeLine";
 import { OutdatedComments } from "../OutdatedComments";
 
+/** Per-line finding info passed from Smart Diff. */
+export interface FileFinding {
+  line: number;
+  severity: Severity;
+  /** Full FindingRecord(s) for this line — present when a real review backs the line. */
+  findings?: FindingRecord[];
+}
+
+/** Findings badge shown in the FileCard header when findings are present.
+ *  Extracted to its own component so useTranslations("prReview") is only called
+ *  when this component is actually rendered (keeps the smoke test clean). */
+function FindingsBadge({
+  findingCount,
+  firstLine,
+  filePath,
+  onExpand,
+}: {
+  findingCount: number;
+  firstLine: number | undefined;
+  filePath: string;
+  onExpand: () => void;
+}) {
+  const t = useTranslations("prReview");
+  return (
+    <button
+      type="button"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "2px 8px",
+        borderRadius: 5,
+        fontSize: 12,
+        fontWeight: 600,
+        color: "var(--accent)",
+        background: "var(--accent-bg, rgba(99,102,241,.12))",
+        cursor: "pointer",
+        border: "none",
+        lineHeight: 1.4,
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        onExpand();
+        if (firstLine != null) {
+          requestAnimationFrame(() => {
+            const id = `sd-${filePath}-L${firstLine}`;
+            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+          });
+        }
+      }}
+    >
+      <Icon.AlertTriangle size={12} />
+      {t("smartDiff.findingsBadge", { count: findingCount })}
+    </button>
+  );
+}
+
+/** Small ✦ summary pill rendered inside the file header when summary is present.
+ *  Isolated component so useTranslations("prReview") is only called when rendered
+ *  (the flat DiffViewer path never passes `summary` → this never mounts → no
+ *  "prReview" messages required → smoke test stays clean). */
+function SummaryPill() {
+  const t = useTranslations("prReview");
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        padding: "1px 7px",
+        borderRadius: 5,
+        fontSize: 11,
+        fontWeight: 600,
+        color: "var(--accent)",
+        background: "var(--accent-bg, rgba(99,102,241,.10))",
+        lineHeight: 1.5,
+      }}
+    >
+      {/* sparkle — rendered as a text character; no lucide equivalent */}
+      <span aria-hidden="true" style={{ fontSize: 10 }}>✦</span>
+      {t("smartDiff.summaryPill")}
+    </span>
+  );
+}
+
+/** "What this does: <summary>" line rendered directly below the file card header.
+ *  Same isolation rationale as SummaryPill above. */
+function SummaryLine({ summary }: { summary: string }) {
+  const t = useTranslations("prReview");
+  return (
+    <div
+      style={{
+        fontSize: 12,
+        color: "var(--text-muted)",
+        padding: "4px 12px 6px 12px",
+        borderBottom: "1px solid var(--border)",
+      }}
+    >
+      <span style={{ fontWeight: 600, color: "var(--text-secondary)" }}>
+        {t("smartDiff.whatThisDoes")}
+      </span>{" "}
+      {summary}
+    </div>
+  );
+}
+
 /** Threads anchored to a given parsed line (RIGHT=new, LEFT=old). */
 function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): CommentThread[] {
   if (matched.size === 0) return [];
@@ -30,10 +137,44 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-export function FileCard({ file, commenting }: { file: PrFile; commenting?: DiffCommentApi }) {
+export function FileCard({
+  file,
+  commenting,
+  findings,
+  findingLines,
+  defaultOpen,
+  summary,
+}: {
+  file: PrFile;
+  commenting?: DiffCommentApi;
+  /** Per-line findings with severity (Smart Diff). Takes precedence over findingLines. */
+  findings?: FileFinding[];
+  /** Legacy: new-side line numbers that have findings (Smart Diff, no severity).
+   *  When `findings` is provided this is ignored. Keep for backward compat. */
+  findingLines?: number[];
+  /** Override the default auto-expand heuristic. */
+  defaultOpen?: boolean;
+  /** Pseudocode summary from the smart diff (shown under the header). */
+  summary?: string | null;
+}) {
   const t = useTranslations("shell");
+
+  // Resolve the effective set of finding lines (from `findings` or legacy `findingLines`)
+  const effectiveFindings: FileFinding[] = React.useMemo(() => {
+    if (findings && findings.length > 0) return findings;
+    if (findingLines && findingLines.length > 0) {
+      return findingLines.map((line) => ({ line, severity: "SUGGESTION" as Severity }));
+    }
+    return [];
+  }, [findings, findingLines]);
+
+  const effectiveFindingLines = React.useMemo(
+    () => effectiveFindings.map((f) => f.line),
+    [effectiveFindings],
+  );
+
   const [open, setOpen] = React.useState(
-    (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
   );
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
 
@@ -52,11 +193,39 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
     ? commenting.comments.filter((c) => c.path === file.path).length
     : 0;
 
+  // Finding status dot: show when there are findings; color = crit if any CRITICAL else warn
+  const hasCritical = effectiveFindings.some((f) => f.severity === "CRITICAL");
+  const statusDotColor = hasCritical ? "var(--crit)" : "var(--warn)";
+
+  // Build a per-line lookup for severity + full records in O(1)
+  const findingsByLine = React.useMemo(() => {
+    const map = new Map<number, { severity: Severity; findings?: FindingRecord[] }>();
+    for (const f of effectiveFindings) map.set(f.line, { severity: f.severity, findings: f.findings });
+    return map;
+  }, [effectiveFindings]);
+
+  const hasSummary = !!summary;
+
   return (
     <div style={s.fileCard}>
       <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
+        {/* Status dot — shown when findings exist */}
+        {effectiveFindings.length > 0 && (
+          <span
+            aria-hidden="true"
+            style={{
+              display: "inline-block",
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              background: statusDotColor,
+              flexShrink: 0,
+              marginRight: 2,
+            }}
+          />
+        )}
         <span className="mono" style={s.filePath}>
           {file.path}
         </span>
@@ -72,21 +241,49 @@ export function FileCard({ file, commenting }: { file: PrFile; commenting?: Diff
             {commentCount}
           </span>
         )}
+        {/* Summary pill — only rendered when summary is non-empty */}
+        {hasSummary && <SummaryPill />}
+        {effectiveFindings.length > 0 && (
+          <FindingsBadge
+            findingCount={effectiveFindings.length}
+            firstLine={effectiveFindingLines[0]}
+            filePath={file.path}
+            onExpand={() => setOpen(true)}
+          />
+        )}
       </div>
+
+      {/* "What this does" line — rendered directly below the header when summary is present */}
+      {hasSummary && <SummaryLine summary={summary!} />}
+
       {open && (
         <div style={s.fileBody}>
           {lines.length === 0 ? (
             <div style={s.noDiff}>{t("diffViewer.noDiffText")}</div>
           ) : (
-            lines.map((ln, i) => (
-              <CodeLine
-                key={i}
-                ln={ln}
-                path={file.path}
-                threads={threadsForLine(ln, matched)}
-                commenting={commenting}
-              />
-            ))
+            lines.map((ln, i) => {
+              const isHighlight =
+                effectiveFindingLines.length > 0 &&
+                ln.newNo != null &&
+                effectiveFindingLines.includes(ln.newNo);
+              const anchorId = isHighlight && ln.newNo != null
+                ? `sd-${file.path}-L${ln.newNo}`
+                : undefined;
+              const lineEntry = ln.newNo != null ? findingsByLine.get(ln.newNo) : undefined;
+              return (
+                <CodeLine
+                  key={i}
+                  ln={ln}
+                  path={file.path}
+                  threads={threadsForLine(ln, matched)}
+                  commenting={commenting}
+                  highlight={isHighlight}
+                  anchorId={anchorId}
+                  severity={isHighlight ? lineEntry?.severity : undefined}
+                  findings={isHighlight ? lineEntry?.findings : undefined}
+                />
+              );
+            })
           )}
           {commenting && commenting.showComments && <OutdatedComments threads={outdated} />}
         </div>

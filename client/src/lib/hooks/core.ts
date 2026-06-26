@@ -18,6 +18,7 @@ import type {
   SpecFile,
   IndexStatus,
 } from "../types";
+import type { Intent } from "@devdigest/shared";
 
 // ---- Settings (F1: GET/PUT /settings, POST /settings/test-connection) ----
 export function useSettings() {
@@ -133,5 +134,25 @@ export function useReindexContext() {
   return useMutation({
     mutationFn: (repoId: string) => api.post<IndexStatus>(`/repos/${repoId}/context/reindex`),
     onSuccess: (_d, repoId) => qc.invalidateQueries({ queryKey: ["context", repoId] }),
+  });
+}
+
+// ---- PR Intent (A-series: GET /pulls/:id/intent, POST /pulls/:id/intent/recompute) ----
+
+/** Fetch the persisted intent classification for a PR. Returns null if not yet computed. */
+export function usePrIntent(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["pr-intent", prId],
+    queryFn: () => api.get<Intent | null>(`/pulls/${prId}/intent`),
+    enabled: prId != null,
+  });
+}
+
+/** Force-recompute the intent classification and persist it. Invalidates the query on success. */
+export function useRecomputeIntent(prId: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<Intent>(`/pulls/${prId}/intent/recompute`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["pr-intent", prId] }),
   });
 }

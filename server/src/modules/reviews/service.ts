@@ -1,13 +1,15 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, Intent, RunEventKind, RunTrace, SmartDiff } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { runCostUsd } from '../../adapters/llm/pricing.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
+import { IntentService } from './intent-service.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
+import { composeSmartDiff } from './smart-diff.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -29,12 +31,14 @@ export type { ReviewDto, ReviewDtoFinding } from './helpers.js';
 export class ReviewService {
   private repo: ReviewRepository;
   private agents: Container['agentsRepo'];
+  private intent: IntentService;
   private executor: ReviewRunExecutor;
 
   constructor(private container: Container) {
     this.repo = new ReviewRepository(container.db);
     this.agents = container.agentsRepo;
-    this.executor = new ReviewRunExecutor(container, this.repo, this.agents);
+    this.intent = new IntentService(container, this.repo);
+    this.executor = new ReviewRunExecutor(container, this.repo, this.agents, this.intent);
   }
 
   // ===========================================================================
@@ -171,6 +175,74 @@ export class ReviewService {
     }
     return rows.map(({ review, findings }) =>
       reviewToDto(review, findings, review.agentId ? names.get(review.agentId) : null),
+    );
+  }
+
+  /**
+   * Compose the Smart Diff for a PR: classify each changed file by role
+   * (boilerplate / wiring / core), annotate with finding lines from the most
+   * recent review per agent, and produce a split suggestion.
+   *
+   * Purely deterministic — NEVER calls an LLM. The expensive model pass already
+   * happened in the Structured Reviewer; this only composes ready files + ready
+   * findings, so it costs zero tokens.
+   */
+  async smartDiff(workspaceId: string, prId: string): Promise<SmartDiff> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+
+    const [files, reviewRows, storedIntent] = await Promise.all([
+      this.repo.getPrFiles(prId),
+      this.repo.reviewsForPull(prId),
+      this.repo.getIntent(prId),
+    ]);
+
+    // Pick the newest review per agentId (reviewsForPull is newest-first, so
+    // the first-seen per agentId wins). null agentId is its own bucket (the
+    // seed review). Collect non-dismissed findings from the winning reviews —
+    // mirrors the PR-list rollup so badge counts agree across the app.
+    const seenAgents = new Set<string | null>();
+    const findings: { file: string; start_line: number }[] = [];
+    for (const { review, findings: rowFindings } of reviewRows) {
+      const key = review.agentId ?? null;
+      if (seenAgents.has(key)) continue;
+      seenAgents.add(key);
+      for (const f of rowFindings) {
+        if (f.dismissedAt == null) {
+          findings.push({ file: f.file, start_line: f.startLine });
+        }
+      }
+    }
+
+    return composeSmartDiff(
+      files.map((f) => ({ path: f.path, additions: f.additions, deletions: f.deletions })),
+      findings,
+      storedIntent ?? null,
+    );
+  }
+
+  // ===========================================================================
+  // Intent Layer (derived PR intent/scope)
+  // ===========================================================================
+
+  /** Stored intent for a PR; null when not yet computed (pure read, no compute). */
+  async getIntent(workspaceId: string, prId: string): Promise<Intent | null> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    return (await this.repo.getIntent(prId)) ?? null;
+  }
+
+  /** Force (re)classification of a PR's intent + persist (the "Recompute" button). */
+  async recomputeIntent(workspaceId: string, prId: string, logger?: Logger): Promise<Intent> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+    return this.intent.compute(
+      workspaceId,
+      pull,
+      repo,
+      logger ? (m) => logger.info({ prId }, m) : undefined,
     );
   }
 

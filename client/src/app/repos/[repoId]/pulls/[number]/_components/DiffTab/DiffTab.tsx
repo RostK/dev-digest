@@ -1,11 +1,23 @@
 "use client";
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { SectionLabel, Button } from "@devdigest/ui";
-import { DiffViewer, type DiffCommentApi } from "@/components/diff-viewer";
-import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
+import {
+  DiffViewer,
+  SmartDiffViewer,
+  type DiffCommentApi,
+} from "@/components/diff-viewer";
+import type { FindingsBySeverity } from "@/components/diff-viewer/SmartDiffViewer/SmartDiffViewer";
+import {
+  usePrComments,
+  useCreatePrComment,
+  usePrSmartDiff,
+  usePrReviews,
+} from "@/lib/hooks/reviews";
+import { latestReviewsPerAgent } from "@/components/SeverityIndicators/helpers";
 import { notify } from "@/lib/toast";
-import type { PrFile } from "@devdigest/shared";
+import type { PrFile, FindingRecord } from "@devdigest/shared";
 
 interface DiffTabProps {
   prId: string | null;
@@ -15,11 +27,41 @@ interface DiffTabProps {
   canComment?: boolean;
 }
 
+type ViewMode = "smart" | "original";
+
+/**
+ * Build a per-file map of FindingRecord[] from the latest review per agent.
+ * Uses only non-dismissed findings. The full records are passed down so
+ * clicking a severity badge can reveal inline finding details (InlineFinding).
+ */
+function buildFindingsByPath(reviews: ReturnType<typeof usePrReviews>["data"]): FindingsBySeverity {
+  const map: FindingsBySeverity = new Map();
+  if (!reviews) return map;
+
+  const latest = latestReviewsPerAgent(reviews);
+  for (const review of latest) {
+    for (const finding of review.findings) {
+      if (finding.dismissed_at) continue;
+      const { file, start_line } = finding;
+      if (!file || start_line == null) continue;
+
+      if (!map.has(file)) map.set(file, []);
+      map.get(file)!.push(finding as FindingRecord);
+    }
+  }
+  return map;
+}
+
 export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+  const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
+  const { data: smartDiff } = usePrSmartDiff(prId);
+  const { data: reviews } = usePrReviews(prId);
+
   // Comments start hidden so the diff is clean by default — toggle to reveal.
   const [showComments, setShowComments] = React.useState(false);
+  const [viewMode, setViewMode] = React.useState<ViewMode>("smart");
 
   const commentCount = comments?.length ?? 0;
 
@@ -40,26 +82,67 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
     },
   };
 
+  // Build the per-file findings map once reviews are loaded
+  const findingsBySeverity = React.useMemo(
+    () => buildFindingsByPath(reviews),
+    [reviews],
+  );
+
+  const isSmartMode = viewMode === "smart" && !!smartDiff;
+  const sectionTitle = isSmartMode
+    ? t("smartDiff.reviewerOrdered")
+    : `Files changed · ${filesCount} files`;
+
+  const right = (
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      {/* Smart / Original order toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <Button
+          kind={viewMode === "smart" ? "primary" : "ghost"}
+          size="sm"
+          onClick={() => setViewMode("smart")}
+          aria-pressed={viewMode === "smart"}
+        >
+          {t("smartDiff.smartOrder")}
+        </Button>
+        <Button
+          kind={viewMode === "original" ? "primary" : "ghost"}
+          size="sm"
+          onClick={() => setViewMode("original")}
+          aria-pressed={viewMode === "original"}
+        >
+          {t("smartDiff.originalOrder")}
+        </Button>
+      </div>
+      {/* Comment visibility toggle */}
+      {commentCount > 0 && (
+        <Button
+          kind="ghost"
+          size="sm"
+          icon={showComments ? "EyeOff" : "Eye"}
+          onClick={() => setShowComments((v) => !v)}
+        >
+          {showComments ? "Hide comments" : "Show comments"} ({commentCount})
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <section>
-      <SectionLabel
-        icon="Code"
-        right={
-          commentCount > 0 ? (
-            <Button
-              kind="ghost"
-              size="sm"
-              icon={showComments ? "EyeOff" : "Eye"}
-              onClick={() => setShowComments((v) => !v)}
-            >
-              {showComments ? "Hide comments" : "Show comments"} ({commentCount})
-            </Button>
-          ) : undefined
-        }
-      >
-        Files changed · {filesCount} files
+      <SectionLabel icon="Code" right={right}>
+        {sectionTitle}
       </SectionLabel>
-      <DiffViewer files={files} commenting={commenting} />
+      {isSmartMode ? (
+        <SmartDiffViewer
+          files={files}
+          smartDiff={smartDiff}
+          commenting={commenting}
+          findingsBySeverity={findingsBySeverity}
+        />
+      ) : (
+        <DiffViewer files={files} commenting={commenting} />
+      )}
     </section>
   );
 }
