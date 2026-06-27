@@ -25,8 +25,31 @@ MCP host (Claude Code, Claude Desktop, etc.) over stdin/stdout.
 ## Installation
 
 ```bash
-cd mcp && npm install
+cd mcp && pnpm install
 ```
+
+## Development
+
+The package is managed with **pnpm** (pinned via `packageManager` in `package.json`).
+
+| Script | What it does |
+|---|---|
+| `pnpm start` | Run the stdio server directly (`tsx src/index.ts`). |
+| `pnpm inspect` | Launch the [MCP Inspector](https://github.com/modelcontextprotocol/inspector) against the server — a browser UI to call tools and watch JSON-RPC traffic. |
+| `pnpm typecheck` | Type-check with `tsc --noEmit`. |
+| `pnpm test` | Run the Vitest suite. |
+
+### Inspecting the server
+
+```bash
+cd mcp && pnpm inspect
+```
+
+This boots the server over stdio (`npx @modelcontextprotocol/inspector tsx src/index.ts`)
+and opens the Inspector web UI, where you can list and call each tool. The server starts
+regardless, but for the tools to return real data the DevDigest API must be running on
+`http://localhost:3001` (start it via `./scripts/dev.sh`). All diagnostics go to stderr,
+so the only stdout traffic the Inspector shows is JSON-RPC messages.
 
 ## Registration
 
