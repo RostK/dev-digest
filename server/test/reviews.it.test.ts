@@ -61,7 +61,12 @@ const REVIEW_FIXTURE: Review = {
 };
 
 let repoSeq = 0;
-async function setupRepoAndPr(db: PgFixture['handle']['db'], workspaceId: string) {
+async function setupRepoAndPr(
+  db: PgFixture['handle']['db'],
+  workspaceId: string,
+  opts: { withPatch?: boolean } = {},
+) {
+  const { withPatch = true } = opts;
   const name = `payments-api-${repoSeq++}`;
   const [repo] = await db
     .insert(t.repos)
@@ -85,14 +90,17 @@ async function setupRepoAndPr(db: PgFixture['handle']['db'], workspaceId: string
       body: 'Add rate limiting. Closes #471.',
     })
     .returning();
-  // persist the patch so the reviewer can reconstruct a diff (MockGit also returns one)
-  await db.insert(t.prFiles).values({
-    prId: pr!.id,
-    path: 'src/config.ts',
-    additions: 1,
-    deletions: 0,
-    patch: '@@ -10,3 +10,4 @@\n   port: 3000,\n+  stripeKey: "sk_live_xxx",\n   redisUrl: x,',
-  });
+  // persist the patch so the reviewer can reconstruct a diff (MockGit also returns one).
+  // Skipped for the empty-diff case so BOTH diff sources (git + pr_files) come up empty.
+  if (withPatch) {
+    await db.insert(t.prFiles).values({
+      prId: pr!.id,
+      path: 'src/config.ts',
+      additions: 1,
+      deletions: 0,
+      patch: '@@ -10,3 +10,4 @@\n   port: 3000,\n+  stripeKey: "sk_live_xxx",\n   redisUrl: x,',
+    });
+  }
   return { repo: repo!, pr: pr! };
 }
 
@@ -110,13 +118,17 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     await pg?.stop();
   });
 
-  function appWith(structured: unknown, provider: 'openai' | 'anthropic' = 'openai') {
+  function appWith(
+    structured: unknown,
+    provider: 'openai' | 'anthropic' = 'openai',
+    git: MockGitClient = new MockGitClient({ diff: DIFF }),
+  ) {
     return buildApp({
       config: config(),
       db: pg.handle.db,
       overrides: {
         embedder: new MockEmbedder(),
-        git: new MockGitClient({ diff: DIFF }),
+        git,
         llm: {
           [provider]: new MockLLMProvider(provider, { structured }),
         },
@@ -208,6 +220,35 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.status).toBe('done');
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
+
+    await app.close();
+  });
+
+  it('empty diff fails the run instead of approving (no diff from git OR pr_files)', async () => {
+    // git returns nothing AND the PR has no persisted patches → loadDiff yields an
+    // empty diff. The run must FAIL loudly, never review (and "approve") nothing.
+    const app = await appWith(REVIEW_FIXTURE, 'openai', new MockGitClient({ diff: '' }));
+    const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId, { withPatch: false });
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'EmptyDiff', provider: 'openai', model: 'gpt-4.1', system_prompt: 's' },
+      })
+    ).json();
+
+    const body = (
+      await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } })
+    ).json();
+    expect(body.runs).toHaveLength(1);
+
+    const runs = await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+    expect(runs[0]!.status).toBe('failed');
+    expect(runs[0]!.error ?? '').toMatch(/empty|no files/i);
+
+    // Crucially: no review row was written — an empty diff is never an approve.
+    const reviews = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/reviews` })).json();
+    expect(reviews).toHaveLength(0);
 
     await app.close();
   });
