@@ -55,6 +55,7 @@ export function IntentCard({ prId }: IntentCardProps) {
         {t("title")}
       </SectionLabel>
 
+      <div style={s.scroll}>
       {isComputing && (
         <p style={s.emptyHint}>{t("computing")}</p>
       )}
@@ -100,6 +101,7 @@ export function IntentCard({ prId }: IntentCardProps) {
           {/* Recompute button also appears in footer only when no header button is visible */}
         </>
       )}
+      </div>
     </div>
   );
 }

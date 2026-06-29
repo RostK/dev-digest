@@ -7,6 +7,16 @@ export const s = {
     background: "var(--bg-elevated)",
     borderRadius: 10,
     padding: 18,
+    height: "min(560px, 72vh)",
+    display: "flex",
+    flexDirection: "column",
+  } satisfies CSSProperties,
+  /** Scrollable body below the fixed section header. */
+  scroll: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: "auto",
+    paddingRight: 4,
   } satisfies CSSProperties,
   summary: {
     fontSize: 14,

@@ -1,6 +1,13 @@
 import type { CSSProperties } from "react";
 
 export const s = {
+  /** PR-brief grid: Intent + Blast radius side by side, stacking when narrow. */
+  brief: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))",
+    gap: 20,
+    alignItems: "start",
+  } satisfies CSSProperties,
   descriptionBox: {
     border: "1px solid var(--border)",
     borderRadius: 8,
