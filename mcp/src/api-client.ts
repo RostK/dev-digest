@@ -76,8 +76,8 @@ export interface ApiClient {
   /** GET /repos/:id/conventions — list stored conventions for a repo. */
   listConventions(repoId: string): Promise<ConventionCandidate[]>;
 
-  /** POST /repos/:id/blast { files } — blast radius for an explicit file set. */
-  blastRadius(repoId: string, files: string[]): Promise<BlastResponse>;
+  /** GET /pulls/:id/blast — blast radius for a tracked PR. */
+  blastForPr(prId: string): Promise<BlastResponse>;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,9 +209,7 @@ export class HttpApiClient implements ApiClient {
     );
   }
 
-  blastRadius(repoId: string, files: string[]): Promise<BlastResponse> {
-    return this.request<BlastResponse>('POST', `/repos/${repoId}/blast`, {
-      files,
-    });
+  blastForPr(prId: string): Promise<BlastResponse> {
+    return this.request<BlastResponse>('GET', `/pulls/${prId}/blast`);
   }
 }

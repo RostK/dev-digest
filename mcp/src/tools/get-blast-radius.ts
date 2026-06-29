@@ -1,12 +1,13 @@
 /**
- * get_blast_radius tool — report a PR's blast radius for a set of changed files.
+ * get_blast_radius tool — report a pull request's blast radius.
  *
- * Reads the DevDigest repo-intel index (no parsing at call time): changed
- * symbols → their callers → impacted endpoints/crons, plus an honest degraded
- * flag when the index is incomplete.
+ * Reads the DevDigest repo-intel index (no parsing at call time): the PR's
+ * changed symbols → their callers → impacted endpoints/crons, plus an honest
+ * degraded flag when the index is incomplete. Mirrors get_findings' inputs
+ * (repo "owner/name" + PR number).
  *
  * Architecture (onion):
- *   handler depends on the ApiClient port + resolveRepo helper.
+ *   handler depends on the ApiClient port + resolveRepo/resolvePr helpers.
  *   `registerGetBlastRadius` is the thin wiring; tests call `getBlastRadiusHandler` directly.
  */
 
@@ -17,7 +18,7 @@ import { registerTool } from '../register.js';
 import type { ApiClient } from '../api-client.js';
 import { ApiError, NetworkError } from '../api-client.js';
 import { ForwardError } from '../errors.js';
-import { resolveRepo } from '../resolve.js';
+import { resolveRepo, resolvePr } from '../resolve.js';
 import { toBlastOutput } from '../format.js';
 
 // ---------------------------------------------------------------------------
@@ -30,12 +31,12 @@ export interface HandlerDeps {
 }
 
 // ---------------------------------------------------------------------------
-// Input type
+// Input type (mirrors the inputSchema raw shape)
 // ---------------------------------------------------------------------------
 
 export interface GetBlastRadiusInput {
   repo: string;
-  files: string[];
+  pr: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,9 +71,10 @@ export async function getBlastRadiusHandler(
   input: GetBlastRadiusInput,
 ): Promise<CallToolResult> {
   try {
-    const { repo, files } = input;
+    const { repo, pr } = input;
     const repoRecord = await resolveRepo(deps.client, repo);
-    const res = await deps.client.blastRadius(repoRecord.id, files);
+    const prId = await resolvePr(deps.client, repoRecord.id, pr);
+    const res = await deps.client.blastForPr(prId);
     const out = toBlastOutput(res);
 
     if (out.changed_symbols.length === 0 && out.downstream.length === 0) {
@@ -80,7 +82,7 @@ export async function getBlastRadiusHandler(
         ? ' (the repo-intel index is degraded — re-index the repo for full results)'
         : '';
       return ok(
-        `no blast radius for "${repo}" — no indexed symbols in the given files${hint}.`,
+        `no blast radius for "${repo}" #${pr} — no indexed symbols in the changed files${hint}.`,
         out as unknown as Record<string, unknown>,
       );
     }
@@ -102,14 +104,12 @@ export function registerGetBlastRadius(server: McpServer, deps: HandlerDeps): vo
     {
       title: 'Get pull request blast radius',
       description:
-        "Report the blast radius of changed files in a repo — the changed symbols, who calls them, and the impacted HTTP endpoints/crons. Read straight from the repo-intel index; flags a degraded/partial index instead of failing.",
+        "Report a pull request's blast radius — the changed symbols, who calls them, and the impacted HTTP endpoints/crons. Read straight from the repo-intel index; flags a degraded/partial index instead of failing.",
       inputSchema: {
         repo: z
           .string()
           .describe('Repository as "owner/name", e.g. acme/payments-api.'),
-        files: z
-          .array(z.string())
-          .describe('Repo-relative paths of the changed files to analyze.'),
+        pr: z.number().int().describe('Pull request number, e.g. 482.'),
       },
       outputSchema: {
         summary: z.string(),

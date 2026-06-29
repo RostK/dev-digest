@@ -25,7 +25,7 @@ function makeClient(overrides: Partial<ApiClient>): ApiClient {
     listRuns: async () => [],
     listReviews: async () => [],
     listConventions: async () => [],
-    blastRadius: async () => ({ blast: { changed_symbols: [], downstream: [], summary: '' }, degraded: false, index_status: null }),
+    blastForPr: async () => ({ blast: { changed_symbols: [], downstream: [], summary: '' }, degraded: false, index_status: null }),
     ...overrides,
   };
 }
