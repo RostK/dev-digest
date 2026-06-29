@@ -4,8 +4,10 @@
  * Priority (first match wins):
  *   1. boilerplate — lock files, manifests, generated/build dirs, snapshots,
  *                    minified files, source maps, generated migrations
- *   2. wiring      — barrel/index files, entrypoints, config, env, CI
- *   3. core        — everything else (the default)
+ *   2. test        — unit/spec/test files (reviewed differently from prod code)
+ *   3. config      — config modules, tsconfig, dot-rc, YAML, env, CI config
+ *   4. wiring      — barrel/index files + app entrypoints
+ *   5. core        — everything else (the default)
  *
  * Lock files MUST always land in boilerplate — patterns below are intentionally
  * broad (basename match OR segment match) to cover all package managers.
@@ -38,19 +40,16 @@ export const BOILERPLATE_PATTERNS: RegExp[] = [
   /\.map$/,
   // generated SQL migrations (top-level or nested)
   /(?:^|\/)migrations\/[^/]+\.sql$/,
-  // test / spec files — unit tests are mechanical, not business logic
+];
+
+export const TEST_PATTERNS: RegExp[] = [
+  // unit / spec / test files — mechanical, distinct review lens from prod code
   /(?:^|\/)__tests__\//,
   /(?:^|\/)tests?\//,
   /\.(test|spec)\.[tj]sx?$/,
 ];
 
-export const WIRING_PATTERNS: RegExp[] = [
-  // barrel / index files
-  /(?:^|\/)index\.[tj]sx?$/,
-  // common entrypoints
-  /(?:^|\/)server\.[tj]sx?$/,
-  /(?:^|\/)main\.[tj]sx?$/,
-  /(?:^|\/)app\.[tj]sx?$/,
+export const CONFIG_PATTERNS: RegExp[] = [
   // app config module (e.g. src/config.ts) — wires env/settings into the app
   /(?:^|\/)config\.[tj]sx?$/,
   // config files (e.g. vite.config.ts, jest.config.js, webpack.config.mjs)
@@ -65,6 +64,15 @@ export const WIRING_PATTERNS: RegExp[] = [
   /\.env(?:\.[^/]+)?$/,
   // GitHub Actions / CI config dirs
   /(?:^|\/)\.github\//,
+];
+
+export const WIRING_PATTERNS: RegExp[] = [
+  // barrel / index files
+  /(?:^|\/)index\.[tj]sx?$/,
+  // common entrypoints
+  /(?:^|\/)server\.[tj]sx?$/,
+  /(?:^|\/)main\.[tj]sx?$/,
+  /(?:^|\/)app\.[tj]sx?$/,
 ];
 
 /** Total lines (additions + deletions) above which a PR is flagged as too-big. */

@@ -50,6 +50,13 @@ describe('classifyFile — wiring', () => {
     'src/server.ts',
     'src/main.ts',
     'src/app.ts',
+  ])('"%s" → wiring', (path) => {
+    expect(classifyFile(path)).toBe('wiring');
+  });
+});
+
+describe('classifyFile — config', () => {
+  it.each([
     'config.ts',
     'src/config.ts',
     'vite.config.ts',
@@ -66,8 +73,8 @@ describe('classifyFile — wiring', () => {
     '.env.production',
     '.env.local',
     '.github/workflows/ci.yml',
-  ])('"%s" → wiring', (path) => {
-    expect(classifyFile(path)).toBe('wiring');
+  ])('"%s" → config', (path) => {
+    expect(classifyFile(path)).toBe('config');
   });
 });
 
@@ -84,7 +91,7 @@ describe('classifyFile — core (default)', () => {
   });
 });
 
-describe('classifyFile — test/spec files → boilerplate', () => {
+describe('classifyFile — test/spec files → test', () => {
   it.each([
     'foo.test.ts',
     'bar.spec.tsx',
@@ -93,8 +100,8 @@ describe('classifyFile — test/spec files → boilerplate', () => {
     'src/__tests__/auth.test.ts',
     'src/api/users.spec.ts',
     'lib/utils.test.js',
-  ])('"%s" → boilerplate', (path) => {
-    expect(classifyFile(path)).toBe('boilerplate');
+  ])('"%s" → test', (path) => {
+    expect(classifyFile(path)).toBe('test');
   });
 
   it('src/api/users.ts stays core (not a test file)', () => {
@@ -245,12 +252,12 @@ describe('composeSmartDiff — finding_lines mapping', () => {
       { file: 'src/api/users.ts', start_line: 30 },
     ];
     const result = composeSmartDiff(files, findings);
-    // config.ts is wiring; users.ts is core — findings map across groups.
-    const wiringGroup = result.groups.find((g) => g.role === 'wiring');
+    // config.ts is config; users.ts is core — findings map across groups.
+    const configGroup = result.groups.find((g) => g.role === 'config');
     const coreGroup = result.groups.find((g) => g.role === 'core');
-    expect(wiringGroup).toBeDefined();
+    expect(configGroup).toBeDefined();
     expect(coreGroup).toBeDefined();
-    const configFile = wiringGroup!.files.find((f) => f.path === 'src/config.ts');
+    const configFile = configGroup!.files.find((f) => f.path === 'src/config.ts');
     const usersFile = coreGroup!.files.find((f) => f.path === 'src/api/users.ts');
     expect(configFile!.finding_lines).toEqual([12]);
     expect(usersFile!.finding_lines).toEqual([30, 45]); // sorted
