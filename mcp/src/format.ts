@@ -14,6 +14,7 @@ import type {
   FindingRecord,
   ReviewRecord,
   ConventionCandidate,
+  BlastResponse,
 } from '@devdigest/shared';
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,24 @@ export type ConventionRef = {
   accepted: boolean;
 };
 
+/**
+ * Compact blast-radius shape — the nested map hoisted to the top level with the
+ * degraded signal, so a model gets symbols → callers → endpoints plus an honest
+ * "index is partial" flag in one object.
+ */
+export type BlastOutput = {
+  summary: string;
+  changed_symbols: { name: string; file: string; kind: string }[];
+  downstream: {
+    symbol: string;
+    callers: { name: string; file: string; line: number }[];
+    endpoints_affected: string[];
+    crons_affected: string[];
+  }[];
+  degraded: boolean;
+  index_status: string | null;
+};
+
 // ---------------------------------------------------------------------------
 // Mappers
 // ---------------------------------------------------------------------------
@@ -116,5 +135,19 @@ export function toConvention(c: ConventionCandidate): ConventionRef {
     evidence_start_line: c.evidence_start_line,
     evidence_end_line: c.evidence_end_line,
     accepted: c.accepted,
+  };
+}
+
+/**
+ * Map a BlastResponse to the compact tool output: the nested map hoisted with
+ * the degraded/index-status signal.
+ */
+export function toBlastOutput(res: BlastResponse): BlastOutput {
+  return {
+    summary: res.blast.summary,
+    changed_symbols: res.blast.changed_symbols,
+    downstream: res.blast.downstream,
+    degraded: res.degraded ?? false,
+    index_status: res.index_status ?? null,
   };
 }

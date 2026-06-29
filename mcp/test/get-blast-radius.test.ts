@@ -1,127 +1,197 @@
 /**
  * Tests for get-blast-radius.ts — getBlastRadiusHandler.
  *
- * This is a STUB tool: it ALWAYS returns isError:true, never throws,
- * and never calls the (fake) client. These tests verify that contract.
+ * Uses a plain fake ApiClient (no fetch). Verifies: success (maps the blast
+ * map to structuredContent), resolve miss → isError, empty map → success text,
+ * degraded flag surfaced, and API errors → isError (never throws).
  */
 
 import { describe, it, expect, vi } from 'vitest';
 import { getBlastRadiusHandler } from '../src/tools/get-blast-radius.js';
+import { ApiError } from '../src/api-client.js';
 import type { ApiClient } from '../src/api-client.js';
+import type { Repo, BlastResponse } from '@devdigest/shared';
 
 // ---------------------------------------------------------------------------
-// Fake-client builder (should never be called for this tool)
+// Fake-client builder
 // ---------------------------------------------------------------------------
 
-function makeClient(overrides: Partial<ApiClient> = {}): ApiClient {
+function makeClient(overrides: Partial<ApiClient>): ApiClient {
   return {
-    listAgents: vi.fn<() => Promise<never>>().mockRejectedValue(new Error('listAgents was called')),
-    listRepos: vi.fn<() => Promise<never>>().mockRejectedValue(new Error('listRepos was called')),
-    listPulls: vi.fn<() => Promise<never>>().mockRejectedValue(new Error('listPulls was called')),
-    runReview: vi.fn<() => Promise<never>>().mockRejectedValue(new Error('runReview was called')),
-    listRuns: vi.fn<() => Promise<never>>().mockRejectedValue(new Error('listRuns was called')),
-    listReviews: vi.fn<() => Promise<never>>().mockRejectedValue(new Error('listReviews was called')),
-    listConventions: vi.fn<() => Promise<never>>().mockRejectedValue(new Error('listConventions was called')),
+    listAgents: async () => [],
+    listRepos: async () => [],
+    listPulls: async () => [],
+    runReview: async () => ({ pr_id: '', runs: [], reviews: [] }),
+    listRuns: async () => [],
+    listReviews: async () => [],
+    listConventions: async () => [],
+    blastRadius: vi
+      .fn<() => Promise<never>>()
+      .mockRejectedValue(new Error('blastRadius was called unexpectedly')),
     ...overrides,
   };
 }
 
-const DEPS = {
-  config: { apiUrl: 'http://localhost:3001' },
-};
+const DEPS = { config: { apiUrl: 'http://localhost:3001' } };
+
+function makeRepo(fullName: string, id = 'repo-uuid'): Repo {
+  return {
+    id,
+    workspace_id: 'ws-1',
+    owner: fullName.split('/')[0] ?? 'owner',
+    name: fullName.split('/')[1] ?? 'name',
+    full_name: fullName,
+    default_branch: 'main',
+    clone_path: null,
+    last_polled_at: null,
+    created_by: null,
+  };
+}
+
+function makeBlast(over: Partial<BlastResponse> = {}): BlastResponse {
+  return {
+    blast: {
+      summary: 'Touches the public rate limiter.',
+      changed_symbols: [{ name: 'rateLimit', file: 'src/lib/rate.ts', kind: 'function' }],
+      downstream: [
+        {
+          symbol: 'rateLimit',
+          callers: [
+            { name: 'handler', file: 'src/api/public/index.ts', line: 23 },
+            { name: 'onWebhook', file: 'src/api/public/webhooks.ts', line: 45 },
+          ],
+          endpoints_affected: ['GET /api/public/items'],
+          crons_affected: [],
+        },
+      ],
+    },
+    degraded: false,
+    index_status: 'full',
+    ...over,
+  };
+}
 
 // ---------------------------------------------------------------------------
-// Always isError:true
+// Success
 // ---------------------------------------------------------------------------
 
-describe('getBlastRadiusHandler — always stub error', () => {
-  it('returns isError:true', async () => {
-    const client = makeClient();
+describe('getBlastRadiusHandler — success', () => {
+  it('maps the blast map to structuredContent', async () => {
+    const blastRadius = vi.fn(async () => makeBlast());
+    const client = makeClient({ listRepos: async () => [makeRepo('acme/api')], blastRadius });
 
     const result = await getBlastRadiusHandler(
       { client, ...DEPS },
-      { repo: 'acme/api', files: ['src/index.ts'] },
+      { repo: 'acme/api', files: ['src/lib/rate.ts'] },
     );
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBeFalsy();
+    expect(blastRadius).toHaveBeenCalledWith('repo-uuid', ['src/lib/rate.ts']);
+
+    const sc = result.structuredContent as {
+      summary: string;
+      downstream: { symbol: string; callers: unknown[]; endpoints_affected: string[] }[];
+      degraded: boolean;
+      index_status: string | null;
+    };
+    expect(sc.summary).toBe('Touches the public rate limiter.');
+    expect(sc.downstream[0]!.callers).toHaveLength(2);
+    expect(sc.downstream[0]!.endpoints_affected).toEqual(['GET /api/public/items']);
+    expect(sc.degraded).toBe(false);
+    expect(sc.index_status).toBe('full');
   });
 
-  it('includes "not implemented yet" in the text message', async () => {
-    const client = makeClient();
+  it('surfaces the degraded flag', async () => {
+    const client = makeClient({
+      listRepos: async () => [makeRepo('acme/api')],
+      blastRadius: async () => makeBlast({ degraded: true, reason: 'no_data', index_status: 'degraded' }),
+    });
 
     const result = await getBlastRadiusHandler(
       { client, ...DEPS },
-      { repo: 'acme/api', files: ['src/index.ts'] },
+      { repo: 'acme/api', files: ['src/lib/rate.ts'] },
     );
 
-    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
-    expect(text).toContain('not implemented yet');
-  });
-
-  it('mentions blast route / later lesson in the message', async () => {
-    const client = makeClient();
-
-    const result = await getBlastRadiusHandler(
-      { client, ...DEPS },
-      { repo: 'acme/api', files: [] },
-    );
-
-    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
-    expect(text).toMatch(/later lesson|repo-intel/i);
+    const sc = result.structuredContent as { degraded: boolean; index_status: string | null };
+    expect(sc.degraded).toBe(true);
+    expect(sc.index_status).toBe('degraded');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Never calls the client
+// Empty map — success (not error)
 // ---------------------------------------------------------------------------
 
-describe('getBlastRadiusHandler — never calls the client', () => {
-  it('does not call any ApiClient method', async () => {
-    const client = makeClient();
+describe('getBlastRadiusHandler — empty map', () => {
+  it('returns a non-error setup hint when no symbols are indexed', async () => {
+    const client = makeClient({
+      listRepos: async () => [makeRepo('acme/api')],
+      blastRadius: async () =>
+        makeBlast({ blast: { summary: '', changed_symbols: [], downstream: [] } }),
+    });
 
-    // getBlastRadiusHandler is expected to NEVER call the client.
-    // If it did, the vi.fn() mocks above would reject, causing the handler
-    // to either throw or return an error unrelated to the stub message.
     const result = await getBlastRadiusHandler(
       { client, ...DEPS },
-      { repo: 'acme/api', files: ['src/index.ts'] },
+      { repo: 'acme/api', files: ['src/lib/rate.ts'] },
     );
 
-    // Verify the result is the stub error, not a client-caused error.
-    expect(result.isError).toBe(true);
-    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('not implemented yet');
+    expect(result.isError).toBeFalsy();
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
+    expect(text).toContain('no blast radius');
+    expect(text).toContain('"acme/api"');
+  });
 
-    // Verify no client methods were called.
-    expect(vi.mocked(client.listRepos)).not.toHaveBeenCalled();
-    expect(vi.mocked(client.listAgents)).not.toHaveBeenCalled();
+  it('mentions the degraded index in the empty hint', async () => {
+    const client = makeClient({
+      listRepos: async () => [makeRepo('acme/api')],
+      blastRadius: async () =>
+        makeBlast({
+          blast: { summary: '', changed_symbols: [], downstream: [] },
+          degraded: true,
+          index_status: 'degraded',
+        }),
+    });
+
+    const result = await getBlastRadiusHandler(
+      { client, ...DEPS },
+      { repo: 'acme/api', files: ['x.ts'] },
+    );
+    const text = (result.content[0] as { text?: string } | undefined)?.text ?? '';
+    expect(text).toMatch(/degraded/i);
   });
 });
 
 // ---------------------------------------------------------------------------
-// Never throws — always returns a CallToolResult
+// Errors — never throws
 // ---------------------------------------------------------------------------
 
-describe('getBlastRadiusHandler — never throws', () => {
-  it('does not throw even with empty files array', async () => {
-    const client = makeClient();
+describe('getBlastRadiusHandler — errors', () => {
+  it('returns isError:true when the repo is not found', async () => {
+    const client = makeClient({ listRepos: async () => [makeRepo('acme/other')] });
 
-    await expect(
-      getBlastRadiusHandler({ client, ...DEPS }, { repo: 'acme/api', files: [] }),
-    ).resolves.not.toThrow();
+    const result = await getBlastRadiusHandler(
+      { client, ...DEPS },
+      { repo: 'acme/unknown', files: [] },
+    );
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('"acme/unknown"');
   });
 
-  it('does not throw with various inputs', async () => {
-    const client = makeClient();
+  it('maps an ApiError to isError:true without throwing', async () => {
+    const client = makeClient({
+      listRepos: async () => [makeRepo('acme/api')],
+      blastRadius: async () => {
+        throw new ApiError({ code: 'not_found', message: 'Pull request not found', status: 404 });
+      },
+    });
 
-    const inputs = [
-      { repo: 'org/repo', files: [] },
-      { repo: 'a/b', files: ['x.ts', 'y.ts', 'z.ts'] },
-      { repo: '', files: [] },
-    ];
+    const result = await getBlastRadiusHandler(
+      { client, ...DEPS },
+      { repo: 'acme/api', files: ['x.ts'] },
+    );
 
-    for (const input of inputs) {
-      const result = await getBlastRadiusHandler({ client, ...DEPS }, input);
-      expect(result.isError).toBe(true);
-    }
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text?: string } | undefined)?.text).toContain('API error');
   });
 });

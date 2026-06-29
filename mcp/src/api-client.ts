@@ -15,6 +15,7 @@ import type { Agent, ConventionCandidate } from '@devdigest/shared';
 import type { Repo, PrMeta } from '@devdigest/shared';
 import type { ReviewRunResponse, ReviewRecord } from '@devdigest/shared';
 import type { RunSummary } from '@devdigest/shared';
+import type { BlastResponse } from '@devdigest/shared';
 
 // ---------------------------------------------------------------------------
 // Typed error classes (exported for use in tool handlers)
@@ -74,6 +75,9 @@ export interface ApiClient {
 
   /** GET /repos/:id/conventions — list stored conventions for a repo. */
   listConventions(repoId: string): Promise<ConventionCandidate[]>;
+
+  /** POST /repos/:id/blast { files } — blast radius for an explicit file set. */
+  blastRadius(repoId: string, files: string[]): Promise<BlastResponse>;
 }
 
 // ---------------------------------------------------------------------------
@@ -203,5 +207,11 @@ export class HttpApiClient implements ApiClient {
       'GET',
       `/repos/${repoId}/conventions`,
     );
+  }
+
+  blastRadius(repoId: string, files: string[]): Promise<BlastResponse> {
+    return this.request<BlastResponse>('POST', `/repos/${repoId}/blast`, {
+      files,
+    });
   }
 }
