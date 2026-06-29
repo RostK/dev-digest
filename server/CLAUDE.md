@@ -40,5 +40,7 @@ self-skips without Docker); everything else = hermetic unit (adapters mocked).
 ## Use when
 
 - API/route map, request + DI flow, commands → read `server/README.md`
-- Repo indexing / repo map / blast radius → read `src/modules/repo-intel/README.md`
+- Repo indexing / repo map / blast radius facade → read `src/modules/repo-intel/README.md`
+- Blast radius module (routes, contract, mapper, summary, degraded semantics) → read `src/modules/blast/README.md`
+- Blast radius user-facing behaviour, data-flow diagram, partial-index fix, MCP tool → read `server/docs/blast-radius.md`
 - Deep-dives → read `server/docs/` · API/contract specs → read `server/specs/` · findings → read `server/INSIGHTS.md`
