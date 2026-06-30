@@ -67,10 +67,24 @@ describe('listAgentsHandler — success', () => {
 
     expect(result.isError).toBeFalsy();
     expect(result.structuredContent).toBeDefined();
-    const sc = result.structuredContent as { agents: { id: string; name: string; enabled: boolean }[] };
+    const sc = result.structuredContent as {
+      agents: { id: string; name: string; model: string; description: string; enabled: boolean }[];
+    };
     expect(sc.agents).toHaveLength(2);
-    expect(sc.agents[0]).toEqual({ id: 'agent-1', name: 'Security', enabled: true });
-    expect(sc.agents[1]).toEqual({ id: 'agent-2', name: 'Perf', enabled: false });
+    expect(sc.agents[0]).toEqual({
+      id: 'agent-1',
+      name: 'Security',
+      model: 'gpt-4',
+      description: 'Test agent',
+      enabled: true,
+    });
+    expect(sc.agents[1]).toEqual({
+      id: 'agent-2',
+      name: 'Perf',
+      model: 'gpt-4',
+      description: 'Test agent',
+      enabled: false,
+    });
   });
 
   it('includes agents in the text content block', async () => {

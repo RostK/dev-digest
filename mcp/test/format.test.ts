@@ -97,20 +97,20 @@ const CONVENTION: ConventionCandidate = {
 // ---------------------------------------------------------------------------
 
 describe('toAgentRef', () => {
-  it('keeps id, name, and enabled', () => {
+  it('keeps id, name, model, description, and enabled', () => {
     const ref = toAgentRef(AGENT);
 
     expect(ref.id).toBe('agent-1');
     expect(ref.name).toBe('Security Reviewer');
+    expect(ref.model).toBe('gpt-4o');
+    expect(ref.description).toBe('Finds security issues in PRs');
     expect(ref.enabled).toBe(true);
   });
 
-  it('drops description, provider, model, system_prompt, output_schema, version, strategy, ci_fail_on, repo_intel', () => {
+  it('drops provider, system_prompt, output_schema, version, strategy, ci_fail_on, repo_intel', () => {
     const ref = toAgentRef(AGENT) as Record<string, unknown>;
 
-    expect(ref['description']).toBeUndefined();
     expect(ref['provider']).toBeUndefined();
-    expect(ref['model']).toBeUndefined();
     expect(ref['system_prompt']).toBeUndefined();
     expect(ref['output_schema']).toBeUndefined();
     expect(ref['version']).toBeUndefined();
@@ -119,9 +119,9 @@ describe('toAgentRef', () => {
     expect(ref['repo_intel']).toBeUndefined();
   });
 
-  it('has exactly 3 keys', () => {
+  it('has exactly 5 keys', () => {
     const ref = toAgentRef(AGENT);
-    expect(Object.keys(ref)).toHaveLength(3);
+    expect(Object.keys(ref)).toHaveLength(5);
   });
 });
 

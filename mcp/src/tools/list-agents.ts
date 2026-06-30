@@ -81,10 +81,16 @@ export function registerListAgents(server: McpServer, deps: HandlerDeps): void {
     {
       title: 'List review agents',
       description:
-        'List the configured reviewer agents with their id, name, and enabled state. Call this first to get a valid agent id for run_agent_on_pull_request.',
+        'List the configured reviewer agents with their id, name, model, description, and enabled state. Call this first to get a valid agent id for run_agent_on_pull_request.',
       outputSchema: {
         agents: z.array(
-          z.object({ id: z.string(), name: z.string(), enabled: z.boolean() }),
+          z.object({
+            id: z.string(),
+            name: z.string(),
+            model: z.string(),
+            description: z.string(),
+            enabled: z.boolean(),
+          }),
         ),
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },

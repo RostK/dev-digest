@@ -21,10 +21,18 @@ import type {
 // Exported concise types — used by tools for output Zod schemas
 // ---------------------------------------------------------------------------
 
-/** Minimal agent descriptor (id, name, enabled). */
+/**
+ * Lean agent descriptor (id, name, model, description, enabled).
+ * `description` and `model` are kept — they are the cheap, short fields a model
+ * reasons over to pick an agent for run_agent_on_pull_request; both are required
+ * on the Agent contract. Token-heavy fields (system_prompt, output_schema, …)
+ * are still dropped.
+ */
 export type AgentRef = {
   id: string;
   name: string;
+  model: string;
+  description: string;
   enabled: boolean;
 };
 
@@ -89,9 +97,15 @@ export type BlastOutput = {
 // Mappers
 // ---------------------------------------------------------------------------
 
-/** Map an Agent to its minimal ref (id, name, enabled). */
+/** Map an Agent to its lean ref (id, name, model, description, enabled). */
 export function toAgentRef(a: Agent): AgentRef {
-  return { id: a.id, name: a.name, enabled: a.enabled };
+  return {
+    id: a.id,
+    name: a.name,
+    model: a.model,
+    description: a.description,
+    enabled: a.enabled,
+  };
 }
 
 /**

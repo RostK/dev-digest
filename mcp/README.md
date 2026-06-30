@@ -8,7 +8,7 @@ MCP host (Claude Code, Claude Desktop, etc.) over stdin/stdout.
 
 | Tool | What it does |
 |---|---|
-| `list_agents` | List the configured reviewer agents with their id, name, and enabled state. Call this first to get a valid agent id for `run_agent_on_pull_request`. |
+| `list_agents` | List the configured reviewer agents with their id, name, model, description, and enabled state. Call this first to get a valid agent id for `run_agent_on_pull_request`. |
 | `run_agent_on_pull_request` | Review a pull request and return its findings. Creates the run, waits for it to finish, and returns the verdict plus findings in one call. |
 | `get_findings` | Return the verdict and findings of a pull request's most recent completed review, without starting a new one. Use after `run_agent_on_pull_request` or to re-read an earlier result. |
 | `get_conventions` | List a repository's stored coding conventions (category, rule, and where each is evidenced in the code). |
@@ -21,6 +21,10 @@ MCP host (Claude Code, Claude Desktop, etc.) over stdin/stdout.
 | `DEVDIGEST_API_URL` | `http://localhost:3001` | Base URL of the local DevDigest API. |
 | `MCP_REVIEW_TIMEOUT_MS` | `180000` | How long (ms) to wait for a review run before timing out. |
 | `MCP_POLL_INTERVAL_MS` | `2000` | Polling interval (ms) for checking run status. |
+
+Values are validated on startup (Zod): the two `*_MS` vars must be positive
+integers and `DEVDIGEST_API_URL` a valid URL. A bad value fails fast with a
+message naming the offending var — the server never starts with a `NaN` timeout.
 
 ## Installation
 
