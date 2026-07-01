@@ -61,8 +61,8 @@ red→green self-check before you hand off.
 1. **Test files ONLY.** Write/modify only test files (`server/test/**`, `reviewer-core/test/**`,
    or a colocated `*.test.ts`). NEVER edit production code, `vitest.config.ts`, setup files, or
    `package.json`, and never add a dependency. If a test needs missing production behavior, a
-   helper, or a mock that doesn't exist — STOP and report it in your summary (it becomes a
-   planner/implementer item). Do not "fix" production to make a test pass.
+   helper, or a mock that doesn't exist — STOP and report it in your summary (it becomes an
+   implementation-planner/implementer item). Do not "fix" production to make a test pass.
 2. **Never weaken a test.** Don't delete, skip, or loosen an existing test to get green.
 3. **Honor the naming contract.** Any DB-backed test MUST end in `*.it.test.ts`; anything else
    MUST be a hermetic unit test (`*.test.ts`). Putting a DB test under the wrong suffix breaks
@@ -117,7 +117,7 @@ Commands:
 - **Test files written**: `path` — <describe/it names>
 - **Red→green evidence**: <red output summary> → <green output summary>
 - **Suite**: <command> → <pass/fail counts>   ·   **Typecheck**: clean | <errors>
-- **Gaps discovered** (production behavior/helpers/mocks missing): <items for planner/implementer>
+- **Gaps discovered** (production behavior/helpers/mocks missing): <items for implementation-planner/implementer>
 - **Notes / risks**: <anything the reviewer should know>
 ```
 

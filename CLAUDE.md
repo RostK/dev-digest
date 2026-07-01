@@ -56,4 +56,6 @@ These docs are curated and often already answer the question — read the releva
   `server/src/modules/repo-intel/README.md`.
 - Touching UI routes or data hooks → read `client/README.md`.
 - Adding/moving tests, or unsure about the unit vs integration split → read `TESTING.md`.
+- Writing a feature spec / requirements *before* planning or coding → run the `spec-creator`
+  skill; SDD specs live in `specs/` (see `specs/README.md`).
 - Need the product overview or what each course lesson (L01–L08) adds → read `README.md`.

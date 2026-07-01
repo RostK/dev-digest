@@ -7,7 +7,7 @@ description: >-
   thin pages, colocated components, server/client boundary). Checks structural topology and
   invariants, tiers findings Violation/Smell/Nit with exact `path:line` citations, and writes
   NOTHING. Use to review the architecture of a diff, module, or branch — NOT line-level
-  correctness/bug review (use /code-review) and NOT planning (use planner).
+  correctness/bug review (use /code-review) and NOT planning (use implementation-planner).
 tools: Read, Glob, Grep, Bash, Skill
 model: opus
 skills:

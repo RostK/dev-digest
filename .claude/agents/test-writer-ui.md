@@ -53,7 +53,7 @@ conventions and RTL discipline, and pass the red→green self-check before you h
    NEVER edit production components/hooks, `vitest.config.ts`, `client/src/test/setup.ts`, or
    `package.json`, and never add a dependency. If a test needs missing production behavior, a
    `data-testid`, or a test util that doesn't exist — STOP and report it in your summary (it
-   becomes a planner/implementer item). Do not "fix" production to make a test pass.
+   becomes an implementation-planner/implementer item). Do not "fix" production to make a test pass.
 2. **Never weaken a test.** Don't delete, skip, or loosen an existing test to get green.
 3. **Stay in your assigned files.** You share a worktree-isolated checkout with parallel
    siblings — touch only the test files your task names.
@@ -101,7 +101,7 @@ Targeted: `pnpm exec vitest run src/<path>/<File>.test.tsx`.
 - **Test files written**: `path` — <describe/it names>
 - **Red→green evidence**: <red output summary> → <green output summary>
 - **Suite**: <command> → <pass/fail counts>   ·   **Typecheck**: clean | <errors>
-- **Gaps discovered** (production behavior/test-ids/utils missing): <items for planner/implementer>
+- **Gaps discovered** (production behavior/test-ids/utils missing): <items for implementation-planner/implementer>
 - **Notes / risks**: <anything the reviewer should know>
 ```
 
