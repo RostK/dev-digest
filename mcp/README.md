@@ -12,7 +12,7 @@ MCP host (Claude Code, Claude Desktop, etc.) over stdin/stdout.
 | `run_agent_on_pull_request` | Review a pull request and return its findings. Creates the run, waits for it to finish, and returns the verdict plus findings in one call. |
 | `get_findings` | Return the verdict and findings of a pull request's most recent completed review, without starting a new one. Use after `run_agent_on_pull_request` or to re-read an earlier result. |
 | `get_conventions` | List a repository's stored coding conventions (category, rule, and where each is evidenced in the code). |
-| `get_blast_radius` | **Stub** — not implemented yet. The repo-intel blast HTTP route ships in a later lesson. Always returns a not-implemented notice. |
+| `get_blast_radius` | Report a pull request's blast radius — the changed symbols, who calls them, and the HTTP endpoints/crons they impact. Read straight from the repo-intel index; flags a degraded/partial index instead of failing. Inputs mirror `get_findings` (repo `"owner/name"` + PR number). |
 
 ## Environment variables
 
@@ -77,7 +77,7 @@ Secrets are never logged.
 ## Notes
 
 - The server talks to the DevDigest API without auth headers (local `LocalNoAuth` workspace).
-- `get_blast_radius` is a forward-compatible stub: its output schema mirrors the
-  future `BlastResult` shape so the tool can be wired up without changes later.
+- `get_blast_radius` reads the repo-intel index only (no parsing at call time) and
+  returns an honest `degraded` flag when the index is incomplete, instead of failing.
 - Shared contracts from `@devdigest/shared` are imported **type-only** — the package
   has zero runtime dependency on the tsconfig path alias.
