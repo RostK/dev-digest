@@ -8,6 +8,8 @@
 import type { Intent, SmartDiff, SmartDiffFile, SmartDiffGroup, SmartDiffRole } from '@devdigest/shared';
 import {
   BOILERPLATE_PATTERNS,
+  TEST_PATTERNS,
+  CONFIG_PATTERNS,
   WIRING_PATTERNS,
   SPLIT_TOO_BIG_LINES,
   SPLIT_DIR_DEPTH,
@@ -90,7 +92,7 @@ export function summarizeFile(
 /**
  * Classify a file path into a SmartDiffRole.
  *
- * Priority: boilerplate → wiring → core (default).
+ * Priority: boilerplate → test → config → wiring → core (default).
  * Backslashes are normalised to forward slashes before matching so Windows
  * paths coming in from the DB work correctly.
  */
@@ -98,6 +100,12 @@ export function classifyFile(path: string): SmartDiffRole {
   const normalised = path.replace(/\\/g, '/');
   for (const re of BOILERPLATE_PATTERNS) {
     if (re.test(normalised)) return 'boilerplate';
+  }
+  for (const re of TEST_PATTERNS) {
+    if (re.test(normalised)) return 'test';
+  }
+  for (const re of CONFIG_PATTERNS) {
+    if (re.test(normalised)) return 'config';
   }
   for (const re of WIRING_PATTERNS) {
     if (re.test(normalised)) return 'wiring';
@@ -127,9 +135,9 @@ function dirPrefix(path: string, depth: number): string {
  * intent   — stored PR intent; used to fill pseudocode_summary via
  *            summarizeFile (optional — existing 2-arg callers stay valid).
  *
- * Group order in the output: core → wiring → boilerplate (empty groups omitted).
- * Within a group files are ordered: has-findings desc, then change-size desc,
- * then path asc.
+ * Group order in the output: core → wiring → config → test → boilerplate
+ * (empty groups omitted). Within a group files are ordered: has-findings desc,
+ * then change-size desc, then path asc.
  */
 export function composeSmartDiff(
   files: { path: string; additions: number; deletions: number }[],
@@ -151,6 +159,8 @@ export function composeSmartDiff(
   const byRole: Record<SmartDiffRole, SmartDiffFile[]> = {
     core: [],
     wiring: [],
+    config: [],
+    test: [],
     boilerplate: [],
   };
 
@@ -180,7 +190,7 @@ export function composeSmartDiff(
     });
 
   // Build groups in canonical output order, omit empty.
-  const ROLE_ORDER: SmartDiffRole[] = ['core', 'wiring', 'boilerplate'];
+  const ROLE_ORDER: SmartDiffRole[] = ['core', 'wiring', 'config', 'test', 'boilerplate'];
   const groups: SmartDiffGroup[] = [];
   for (const role of ROLE_ORDER) {
     const items = sortGroup(byRole[role]);

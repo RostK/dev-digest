@@ -1,4 +1,6 @@
 {
+  "title": "Blast radius",
+  "summaryLabel": "Summary",
   "stat": {
     "symbols": "symbols",
     "callers": "callers",
@@ -9,8 +11,18 @@
     "tree": "tree",
     "graph": "graph"
   },
-  "callerCount": "{count} callers",
-  "noDownstream": "{count} changed symbol(s), no downstream callers found.",
+  "callerCount": "{count, plural, one {# caller} other {# callers}}",
+  "noCallers": "No callers found in the index.",
+  "unaffected": "{count, plural, one {# symbol with no callers} other {# symbols with no callers}}",
+  "empty": {
+    "title": "No blast radius",
+    "body": "No indexed symbols were found in this PR's changed files. The repo is indexed at clone time — re-index it if this looks wrong."
+  },
+  "error": "Couldn't load the blast radius.",
+  "degraded": {
+    "badge": "Partial index",
+    "explain": "The repo-intel index is incomplete, so callers and endpoints may be missing. Re-index the repo for the full map."
+  },
   "graph": {
     "empty": "No downstream callers to graph.",
     "ariaLabel": "Blast radius graph"

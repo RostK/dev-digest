@@ -78,7 +78,9 @@ export const PrHistory = z.object({
 export type PrHistory = z.infer<typeof PrHistory>;
 
 // ---- Smart Diff ----
-export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
+// Reviewer-facing "process" classification of each changed file. Ordered most-
+// to least review-worthy: core logic → wiring → config → tests → boilerplate.
+export const SmartDiffRole = z.enum(['core', 'wiring', 'config', 'test', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
 export const SmartDiffFile = z.object({

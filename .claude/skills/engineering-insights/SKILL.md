@@ -51,6 +51,7 @@ Write to the `INSIGHTS.md` of the **deepest module that owns the changed files**
 |---|---|
 | `client/**` | `client/INSIGHTS.md` |
 | `reviewer-core/**` | `reviewer-core/INSIGHTS.md` |
+| `mcp/**` | `mcp/INSIGHTS.md` |
 | `server/src/modules/repo-intel/**` | `server/src/modules/repo-intel/INSIGHTS.md` |
 | anything else under `server/**` (other modules, `vendor/shared`, `db`, …) | `server/INSIGHTS.md` |
 | `e2e/**` | `e2e/INSIGHTS.md` |

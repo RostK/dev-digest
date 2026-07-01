@@ -59,9 +59,13 @@
   "smartDiff": {
     "coreLabel": "Core logic",
     "wiringLabel": "Wiring",
+    "configLabel": "Config",
+    "testLabel": "Tests",
     "boilerplateLabel": "Boilerplate",
     "coreDesc": "The substance of the change — review closely",
     "wiringDesc": "Hooks the core into the app",
+    "configDesc": "Config, env & CI — check for risky settings",
+    "testDesc": "Tests & specs — confirm they cover the change",
     "boilerplateDesc": "Generated / mechanical — skim",
     "largeTitle": "This PR is large ({lines} changed lines)",
     "largeBody": "Consider splitting it into smaller, focused PRs for easier review:",

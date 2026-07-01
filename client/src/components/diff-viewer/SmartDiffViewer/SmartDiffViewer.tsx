@@ -1,6 +1,7 @@
 /* SmartDiffViewer — reviewer-ordered diff: files grouped by role (core / wiring /
-   boilerplate). Boilerplate section is collapsed by default. Files with finding
-   lines show a clickable badge that expands the card and scrolls to the first hit. */
+   config / test / boilerplate). Boilerplate section is collapsed by default. Files
+   with finding lines show a clickable badge that expands the card and scrolls to
+   the first hit. */
 "use client";
 
 import React from "react";
@@ -27,24 +28,32 @@ export interface SmartDiffViewerProps {
 }
 
 /* ---------- role display map ---------- */
-const ROLE_LABEL_KEY: Record<SmartDiffRole, "smartDiff.coreLabel" | "smartDiff.wiringLabel" | "smartDiff.boilerplateLabel"> = {
+// `satisfies` keeps the exhaustive-role check AND the exact literal key types,
+// so a typo'd i18n key is a compile error (not just a next-intl runtime throw).
+const ROLE_LABEL_KEY = {
   core: "smartDiff.coreLabel",
   wiring: "smartDiff.wiringLabel",
+  config: "smartDiff.configLabel",
+  test: "smartDiff.testLabel",
   boilerplate: "smartDiff.boilerplateLabel",
-};
+} as const satisfies Record<SmartDiffRole, string>;
 
-const ROLE_DESC_KEY: Record<SmartDiffRole, "smartDiff.coreDesc" | "smartDiff.wiringDesc" | "smartDiff.boilerplateDesc"> = {
+const ROLE_DESC_KEY = {
   core: "smartDiff.coreDesc",
   wiring: "smartDiff.wiringDesc",
+  config: "smartDiff.configDesc",
+  test: "smartDiff.testDesc",
   boilerplate: "smartDiff.boilerplateDesc",
-};
+} as const satisfies Record<SmartDiffRole, string>;
 
 /** Token color for the role-group bullet. */
-const ROLE_BULLET_COLOR: Record<SmartDiffRole, string> = {
+const ROLE_BULLET_COLOR = {
   core: "var(--accent)",
   wiring: "var(--warn)",
+  config: "var(--accent-text)",
+  test: "var(--ok)",
   boilerplate: "var(--text-muted)",
-};
+} as const satisfies Record<SmartDiffRole, string>;
 
 /* ---------- SplitBanner ---------- */
 function SplitBanner({

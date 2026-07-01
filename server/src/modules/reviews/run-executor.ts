@@ -106,6 +106,17 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // An empty diff means we never obtained the PR's changes (head not in the
+    // clone AND no stored patches). Reviewing it would send an empty diff to the
+    // model, which happily returns a confident "approve" — a false pass. Fail
+    // every queued run loudly instead.
+    if (diff.files.length === 0) {
+      const msg = 'PR diff is empty — nothing to review (PR head not fetched and no stored patches).';
+      runLog.error(msg);
+      await failAll(msg);
+      return;
+    }
+
     // Intent Layer: load-or-compute the PR's intent ONCE (shared pre-work, fanned
     // into every run's log). Fail-soft — a missing/failed intent never blocks a
     // review; the prompt simply omits the scope block.
