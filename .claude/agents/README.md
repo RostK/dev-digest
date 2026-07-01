@@ -13,8 +13,8 @@ settings) followed by a system-prompt body. Claude delegates to an agent based o
 | [`implementer-ui`](implementer-ui.md) | Executes ONE UI task unit (`client/**`); runs many-in-parallel | Yes | sonnet | `isolation: worktree`, `permissionMode: acceptEdits`, `skills:` ui set, `+Write, Edit, Skill` |
 | [`test-writer-backend`](test-writer-backend.md) | Writes backend tests (`server/**`, `reviewer-core/**`); TDD-first or backfill; red→green | Yes (tests) | sonnet | `isolation: worktree`, `permissionMode: acceptEdits`, `skills:` backend-test set |
 | [`test-writer-ui`](test-writer-ui.md) | Writes UI tests (`client/**`, RTL/jsdom); TDD-first or backfill; red→green | Yes (tests) | sonnet | `isolation: worktree`, `permissionMode: acceptEdits`, `skills:` ui-test set |
-| [`architecture-reviewer`](architecture-reviewer.md) | Read-only architecture review (onion + feature-based); Violation/Smell/Nit, cited | No | opus | read-only tools + `Skill`, `skills:` architecture set |
-| [`plan-verifier`](plan-verifier.md) | Read-only requirements-coverage check of code vs a plan (traceability, not quality) | No | opus | read-only tools + `Skill`, `skills:` light |
+| [`architecture-reviewer`](architecture-reviewer.md) | Read-only architecture review (onion + feature-based); Violation/Smell/Nit, cited | No | sonnet | read-only tools + `Skill`, `skills:` architecture set |
+| [`plan-verifier`](plan-verifier.md) | Read-only requirements-coverage check of code vs a plan (traceability, not quality) | No | sonnet | read-only tools + `Skill`, `skills:` light |
 | [`doc-writer`](doc-writer.md) | Writes docs (Diátaxis + ADR + Mermaid) to the right repo location, grounded in code | Yes (docs) | sonnet | `permissionMode: acceptEdits`, `skills:` mermaid + architecture |
 | [`spec-author`](spec-author.md) | Autonomous SDD author — grounds, analyzes, drafts with `[NEEDS CLARIFICATION]` markers, writes `specs/**` + maintains `specs/INDEX.md`; runs standalone or driven by the `spec-creator` loop | Yes (specs only) | opus | `permissionMode: acceptEdits`, write scope `specs/**`, `+mcp__devdigest__get_conventions/get_blast_radius` |
 
@@ -39,11 +39,15 @@ settings) followed by a system-prompt body. Claude delegates to an agent based o
   well-scoped, and backstopped by their own red→green + typecheck gate. The split mirrors the
   implementers so each preloads only its track's test skills (`react-testing-library` for UI;
   Fastify/Drizzle/Vitest conventions for backend).
-- **`architecture-reviewer` / `plan-verifier` → opus.** Both are read-only judgments with **no
-  downstream gate** and a high cost of being wrong (a false "violation" or a confident-but-unmet
-  "verified"), and both are invoked one-at-a-time (no ×N pressure) — exactly the profile where
-  paying for reasoning quality and low false positives is worth it. Sonnet is an acceptable
-  downgrade if cost matters and the strict grounding rules in their prompts hold up.
+- **`architecture-reviewer` / `plan-verifier` → sonnet** (currently, for cost). Both are read-only
+  judgments with **no downstream gate** and a high cost of being wrong (a false "violation" or a
+  confident-but-unmet "verified"), and both run one-at-a-time (no ×N pressure) — the profile that
+  originally justified opus. They were **downgraded to sonnet to cut cost**, which the design always
+  allowed *"if cost matters and the strict grounding rules in their prompts hold up"*: both prompts
+  are heavily grounding-constrained (every finding / `MET` needs an exact `path:line`; a stub is
+  never `MET`; `NOT FOUND` must say where it searched), leaving little room to hallucinate a verdict.
+  **Revert to opus if you see false `VIOLATION`s or confident-but-unmet `MET`s** — `plan-verifier`
+  is the riskier of the two on sonnet, since it is the last acceptance gate.
 - **`doc-writer` → sonnet.** Grounded technical writing + diagram generation; not precision-
   critical reasoning, and a human reads the prose. Strong enough to mirror an API or turn a plan
   into a doc faithfully, at predictable cost.
@@ -68,19 +72,62 @@ the **HOW**.
 
 `implementation-planner` → produces an Implementation Plan whose task units are tagged `backend|ui`, name
 the exact files and skills, quote relevant INSIGHTS pitfalls, and declare which units are
-parallel-safe (disjoint file sets). You then fan out one implementer per task unit —
+parallel-safe (disjoint file sets). The planner is read-only, so **the main thread persists the
+returned plan to `plans/PLAN-<SPEC-ID>-<slug>.md`** (HOW lives in `plans/`, never `specs/`) — a
+plan is usually executed in a separate chat and verified in a third, so it must survive as a
+durable artifact, not chat scrollback. You then fan out one implementer per task unit —
 `implementer-backend` for `backend` units, `implementer-ui` for `ui` units; each works in its
 own git worktree, applies its preloaded track skill set, makes the tests green, and
-self-reviews only its own diff.
+self-reviews only its own diff. Worktree output is **uncommitted in that worktree** — the
+orchestrator must integrate each worker's files back into the branch (and commit units that later
+units depend on) before the review phase.
 
-Around that core loop sit four more specialists: **`test-writer-backend` / `test-writer-ui`**
-author tests (TDD-first from the plan, or backfill for existing code) with the same red→green
-gate; **`architecture-reviewer`** and **`plan-verifier`** are read-only gates over the result —
-the first judges structural topology (onion/feature-based invariants), the second checks that
-every requirement in the plan was actually implemented (coverage, not quality); **`doc-writer`**
-turns the finished work (or a plan, or any input) into correctly-typed, correctly-placed
-documentation with Mermaid diagrams. `researcher` is the read-only fact-finder used to ground
-any step (project code or the web).
+Around that core loop sit the test and review specialists. **`test-writer-backend` /
+`test-writer-ui`** author tests (TDD-first from the plan's `AC`s — the preferred default — or
+backfill for existing code) with a red→green gate. Then **three read-only gates run in parallel**
+(fan them out in one message — they are independent):
+
+- **`plan-verifier`** — requirement coverage: was every `AC` actually built (evidence, not
+  quality). It reads the plan's `Verify:` hints, which point at **named tests** — so it must run
+  **after the tests exist**, never before, or it reports false `NOT FOUND`s.
+- **`architecture-reviewer`** — structural topology only (onion / feature-based invariants). It
+  does **NOT** hunt bugs.
+- **`/code-review`** — line-level correctness bugs (the gap `architecture-reviewer` deliberately
+  leaves). Use its `ultra` variant for a deep cloud pass.
+
+Their findings feed a **remediation loop**: route fixes back to `implementer-*`, then re-verify
+only the touched items. Finally **`pr-self-review`** gates the whole diff before push/PR.
+**`doc-writer`** turns the finished work (or a plan, or any input) into correctly-typed,
+correctly-placed documentation with Mermaid diagrams. `researcher` is the read-only fact-finder
+used to ground any step (project code or the web).
+
+**End-to-end pipeline** (the parenthesized read-only gates run in parallel):
+
+```
+spec-creator → spec-author        ──►  APPROVED spec        (WHAT, in specs/)
+implementation-planner            ──►  plans/PLAN-*.md       (HOW, persisted by the main thread)
+  then, executing the plan:
+   1. test-writer-*    red tests from each AC              (TDD-first default)
+   2. implementer-*    multi-agent in worktrees → green
+                       → integrate worktree output back into the branch
+   3. ( plan-verifier ‖ architecture-reviewer ‖ /code-review )   ← parallel, read-only
+   4. fix loop:        findings → implementer-* → re-verify touched items
+   5. pr-self-review   whole diff → push / PR
+```
+
+Three commands drive this pipeline, split by how much human judgment each step needs.
+**`/spec-creator`** owns the SPEC phase and **`implementation-planner`** the PLAN phase — run each
+**separately, by hand**, since they are the reasoning-heavy, human-in-the-loop steps (and keep
+their large read context out of the executor). **`/implement`** then automates the tail — build →
+review → fix → gate — from the persisted `plans/PLAN-*.md`: it fans out the implementers, runs the
+three review gates in parallel, drives the bounded post-review fix loop, and stops at the pre-push
+gate, keeping all user Q&A in the main thread.
+
+**Current token-economy toggles** (see also `/implement`): the **`test-writer-*`** agents are
+**paused** — not invoked — so implementers green only existing/own tests and `plan-verifier` will
+report the missing test evidence as `UNVERIFIABLE`/`NOT FOUND` (expected); and
+**`architecture-reviewer` / `plan-verifier` run on `sonnet`** (see Model choices). Re-add a
+red-tests phase and/or revert those models when cost is less tight.
 
 ---
 

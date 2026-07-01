@@ -9,7 +9,7 @@ description: >-
   assumed. Writes NOTHING. Use to confirm done-ness against a plan; for architecture quality use
   architecture-reviewer, for line-level correctness use /code-review.
 tools: Read, Glob, Grep, Bash, Skill
-model: opus
+model: sonnet
 skills:
   - onion-architecture
   - frontend-ui-architecture

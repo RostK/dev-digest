@@ -9,7 +9,7 @@ description: >-
   NOTHING. Use to review the architecture of a diff, module, or branch — NOT line-level
   correctness/bug review (use /code-review) and NOT planning (use implementation-planner).
 tools: Read, Glob, Grep, Bash, Skill
-model: opus
+model: sonnet
 skills:
   - onion-architecture
   - frontend-ui-architecture
