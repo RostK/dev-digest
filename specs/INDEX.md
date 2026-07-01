@@ -7,3 +7,4 @@ The `spec-author` agent appends a row here for every new spec and updates Status
 | Spec ID | Date | Feature | Module | Status | Supersedes | File |
 |---------|------|---------|--------|--------|------------|------|
 | SPEC-01 | 2026-07-01 | PR Blast Radius | cross | implemented | none | [cross/SPEC-01-2026-07-01-pr-blast-radius.md](cross/SPEC-01-2026-07-01-pr-blast-radius.md) |
+| SPEC-02 | 2026-07-01 | Project Context | cross | approved | none | [cross/SPEC-02-2026-07-01-project-context.md](cross/SPEC-02-2026-07-01-project-context.md) |
