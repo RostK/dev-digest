@@ -6,7 +6,7 @@ consumes an approved spec and turns it into a file-level plan; implementers buil
 
 Specs are authored by the **`spec-author`** agent (it grounds, analyzes, drafts with
 `[NEEDS CLARIFICATION]` markers, and is the only writer allowed here) and orchestrated by the
-**`/spec-creator`** loop skill (surfaces the agent's open questions to the user via live Q&A and
+**`/write-spec`** loop skill (surfaces the agent's open questions to the user via live Q&A and
 re-invokes it to resolve them). Run the agent alone for an unattended draft.
 
 ## Taxonomy — one subfolder per module

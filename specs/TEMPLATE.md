@@ -58,6 +58,6 @@ Module: server | client | reviewer-core | repo-intel | cross
 - <suggestion> — <why it improves correctness/UX>. Status: <accepted | rejected | open>.
 
 ## [NEEDS CLARIFICATION]
-<!-- Each open question gets a stable NC-n id so the spec-creator loop can map answers back and
+<!-- Each open question gets a stable NC-n id so the write-spec loop can map answers back and
      spec-author can resolve it in place. Delete each line when resolved; drop the section when empty. -->
 - **NC-1** — <open question spec-author could not resolve from the repo + brief>

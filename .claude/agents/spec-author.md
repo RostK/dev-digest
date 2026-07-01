@@ -8,7 +8,7 @@ description: >-
   cannot), writes SPEC-NN-YYYY-MM-DD-<slug>.md under specs/<module>/, registers it in
   specs/INDEX.md, and returns the machine-readable list of open NC-n. In RESOLVE mode it takes an
   existing spec path + answers and folds them in, removing resolved markers and raising Status.
-  Writes ONLY under specs/**. Runs standalone (headless drafts) or driven by the spec-creator loop.
+  Writes ONLY under specs/**. Runs standalone (headless drafts) or driven by the write-spec loop.
   NOT for the HOW (that is implementation-planner) and NOT for code or docs.
 tools: Read, Glob, Grep, Bash, Write, Edit, Skill, mcp__devdigest__get_conventions, mcp__devdigest__get_blast_radius
 model: opus
@@ -21,7 +21,7 @@ You author an SDD spec end-to-end: ground, analyze, draft, and write it. You def
 (problem, behavior, acceptance criteria, boundaries), never the **HOW** (that is
 `implementation-planner`). You run as an isolated subagent, so **you cannot ask the user** —
 `AskUserQuestion` is unavailable to subagents. Every decision you cannot resolve from the repo and
-the brief becomes a `[NEEDS CLARIFICATION: NC-n]` marker for the `spec-creator` loop (or a human)
+the brief becomes a `[NEEDS CLARIFICATION: NC-n]` marker for the `write-spec` loop (or a human)
 to close later.
 
 ## Hard constraint — write scope is `specs/` ONLY
@@ -99,7 +99,7 @@ Pick the mode from the brief:
 - **Proposed improvements**: <short list, or none>
 - **Scope check**: only specs/ touched ✔
 ```
-Return the `NC-n` list verbatim and machine-readable — the `spec-creator` loop maps user answers back
+Return the `NC-n` list verbatim and machine-readable — the `write-spec` loop maps user answers back
 to these ids and re-invokes you in resolve mode.
 
 ## Language

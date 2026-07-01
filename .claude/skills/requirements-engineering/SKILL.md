@@ -1,14 +1,14 @@
 ---
 name: requirements-engineering
-description: "The craft of turning fuzzy intent into testable requirements for the DevDigest repo — the shared rubric behind a good spec. Covers EARS acceptance criteria (the vague→testable translation), INVEST user stories, acceptance-criteria smells, a completeness checklist for what's missing (failure modes, boundaries, concurrency, tenancy, untrusted input, cross-module, non-functional), and explicit-boundary discipline (Non-goals, MoSCoW, anti-gold-plating). Use WHENEVER authoring or reviewing requirements / acceptance criteria — invoked by the spec-creator skill, and reusable by implementation-planner and plan-verifier for a shared definition of 'a good criterion'."
-when_to_use: "Trigger phrases: 'acceptance criteria', 'write requirements', 'EARS', 'is this criterion testable', 'user story', 'what's missing from this spec', 'definition of ready'. The authoring rubric the spec-creator applies; a shared quality bar for planner/plan-verifier."
+description: "The craft of turning fuzzy intent into testable requirements for the DevDigest repo — the shared rubric behind a good spec. Covers EARS acceptance criteria (the vague→testable translation), INVEST user stories, acceptance-criteria smells, a completeness checklist for what's missing (failure modes, boundaries, concurrency, tenancy, untrusted input, cross-module, non-functional), and explicit-boundary discipline (Non-goals, MoSCoW, anti-gold-plating). Use WHENEVER authoring or reviewing requirements / acceptance criteria — invoked by the write-spec skill, and reusable by implementation-planner and plan-verifier for a shared definition of 'a good criterion'."
+when_to_use: "Trigger phrases: 'acceptance criteria', 'write requirements', 'EARS', 'is this criterion testable', 'user story', 'what's missing from this spec', 'definition of ready'. The authoring rubric the write-spec applies; a shared quality bar for planner/plan-verifier."
 version: 0.1.0
 ---
 
 # requirements-engineering
 
 Turn fuzzy intent into **testable requirements**. This skill is the rubric a spec is graded
-against — it does not place files or run Q&A (that is the `spec-creator` skill). Apply it while
+against — it does not place files or run Q&A (that is the `write-spec` skill). Apply it while
 authoring or reviewing any acceptance criteria.
 
 ## 1 — EARS acceptance criteria
@@ -82,7 +82,7 @@ improves the design beyond the ask — a `Proposed improvement`.
 
 ## Applying it
 
-- The `spec-creator` skill invokes this as its authoring rubric while drafting `specs/TEMPLATE.md`.
+- The `write-spec` skill invokes this as its authoring rubric while drafting `specs/TEMPLATE.md`.
 - `implementation-planner` and `plan-verifier` share this definition of a good criterion, so the
   WHAT stays consistent from spec → plan → verification.
 

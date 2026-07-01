@@ -1,11 +1,11 @@
 ---
-name: spec-creator
+name: write-spec
 description: "Orchestrates SDD spec authoring for the DevDigest repo. Takes a feature request / design-doc / code area / UI mockup, invokes the autonomous spec-author agent to ground + analyze + draft the spec (WHAT, not HOW), then runs the clarification loop: reads back the agent's [NEEDS CLARIFICATION] markers, asks the user LIVE via AskUserQuestion, and re-invokes the agent to fold answers in — until no blocking question remains. Use WHENEVER a spec / requirements must be written interactively before planning or coding."
 when_to_use: "Trigger phrases: 'write a spec', 'create a spec', 'spec out X', 'draft the requirements', 'SDD spec for X', 'formalize this feature'. Runs BEFORE implementation-planner (WHAT, not HOW). For an unattended draft you can call the spec-author agent directly instead."
 version: 0.2.0
 ---
 
-# spec-creator
+# write-spec
 
 You **orchestrate** SDD spec authoring — you do NOT ground, analyze, or write the file yourself.
 The autonomous **`spec-author`** agent does that heavy work (it grounds on the repo, analyzes the
@@ -44,6 +44,9 @@ open questions and feed the answers back until the spec is clean.
          round does not reduce the open `NC-n`, STOP and report — do not loop forever.
 - [ ] 7. REPORT — show the final spec path, Spec ID, current Status, the Proposed improvements, and
          any `NC-n` the user chose to leave open (spec stays `draft` while any remain).
+- [ ] 8. (OPTIONAL) RETRO — if this loop fanned out several agents (multiple spec-author passes,
+         researchers), offer **`/review-run`** while the per-agent telemetry is still fresh in
+         context, before it scrolls out.
 ```
 
 ## Quality bar for a spec

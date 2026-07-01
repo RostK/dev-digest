@@ -16,7 +16,7 @@ settings) followed by a system-prompt body. Claude delegates to an agent based o
 | [`architecture-reviewer`](architecture-reviewer.md) | Read-only architecture review (onion + feature-based); Violation/Smell/Nit, cited | No | sonnet | read-only tools + `Skill`, `skills:` architecture set |
 | [`plan-verifier`](plan-verifier.md) | Read-only requirements-coverage check of code vs a plan (traceability, not quality) | No | sonnet | read-only tools + `Skill`, `skills:` light |
 | [`doc-writer`](doc-writer.md) | Writes docs (Diátaxis + ADR + Mermaid) to the right repo location, grounded in code | Yes (docs) | sonnet | `permissionMode: acceptEdits`, `skills:` mermaid + architecture |
-| [`spec-author`](spec-author.md) | Autonomous SDD author — grounds, analyzes, drafts with `[NEEDS CLARIFICATION]` markers, writes `specs/**` + maintains `specs/INDEX.md`; runs standalone or driven by the `spec-creator` loop | Yes (specs only) | opus | `permissionMode: acceptEdits`, write scope `specs/**`, `+mcp__devdigest__get_conventions/get_blast_radius` |
+| [`spec-author`](spec-author.md) | Autonomous SDD author — grounds, analyzes, drafts with `[NEEDS CLARIFICATION]` markers, writes `specs/**` + maintains `specs/INDEX.md`; runs standalone or driven by the `write-spec` loop | Yes (specs only) | opus | `permissionMode: acceptEdits`, write scope `specs/**`, `+mcp__devdigest__get_conventions/get_blast_radius` |
 
 ## Model choices
 
@@ -64,7 +64,7 @@ settings) followed by a system-prompt body. Claude delegates to an agent based o
 Upstream of the plan sits the **spec**: the autonomous **`spec-author`** agent grounds on the repo,
 analyzes the design, drafts the spec leaving open decisions as `[NEEDS CLARIFICATION]` markers, and
 materializes it as `specs/<module>/SPEC-NN-YYYY-MM-DD-<slug>.md` registered in `specs/INDEX.md`. The
-**`spec-creator`** skill (main thread) wraps it in a clarification loop — it surfaces those markers
+**`write-spec`** skill (main thread) wraps it in a clarification loop — it surfaces those markers
 to the user **live** via `AskUserQuestion` and re-invokes the agent to resolve them (a subagent
 cannot ask the user itself). Run the agent alone for an unattended draft, or via the skill for the
 interactive close-out. The spec is the **WHAT**; `implementation-planner` consumes it and produces
@@ -104,7 +104,7 @@ used to ground any step (project code or the web).
 **End-to-end pipeline** (the parenthesized read-only gates run in parallel):
 
 ```
-spec-creator → spec-author        ──►  APPROVED spec        (WHAT, in specs/)
+write-spec → spec-author        ──►  APPROVED spec        (WHAT, in specs/)
 implementation-planner            ──►  plans/PLAN-*.md       (HOW, persisted by the main thread)
   then, executing the plan:
    1. test-writer-*    red tests from each AC              (TDD-first default)
@@ -115,13 +115,19 @@ implementation-planner            ──►  plans/PLAN-*.md       (HOW, persist
    5. pr-self-review   whole diff → push / PR
 ```
 
-Three commands drive this pipeline, split by how much human judgment each step needs.
-**`/spec-creator`** owns the SPEC phase and **`implementation-planner`** the PLAN phase — run each
-**separately, by hand**, since they are the reasoning-heavy, human-in-the-loop steps (and keep
-their large read context out of the executor). **`/implement`** then automates the tail — build →
-review → fix → gate — from the persisted `plans/PLAN-*.md`: it fans out the implementers, runs the
-three review gates in parallel, drives the bounded post-review fix loop, and stops at the pre-push
-gate, keeping all user Q&A in the main thread.
+Three main-thread **skills** drive this pipeline, one per phase — each wraps/drives its agent(s),
+keeps user Q&A + the phase gate in the main thread, and offers **`/review-run`** at the end:
+- **`/write-spec`** — the SPEC phase; wraps `spec-author`, runs the `[NEEDS CLARIFICATION]` loop.
+- **`/plan-implementation`** — the PLAN phase; wraps the read-only `implementation-planner`, relays
+  its clarifications via `AskUserQuestion`, fans out `researcher`s for its `[RESEARCH NEEDED]` gaps,
+  confirms the execution mode, and **persists the plan to `plans/PLAN-*.md`** (the planner can't write).
+- **`/implement`** — build → review → fix → gate from the persisted plan.
+
+Run spec and plan as their own deliberate, human-in-the-loop steps; `/implement` then automates the
+tail — fanning out the implementers, running the three review gates in parallel, driving the bounded
+post-review fix loop, and stopping at the pre-push gate. (A read-only agent can't prompt the user,
+fan out siblings, or write — so each phase's main-thread duties live in its wrapper skill, never in
+the agent; that is also why the `/review-run` nudge lives in the skills, not the agents.)
 
 **Current token-economy toggles** (see also `/implement`): the **`test-writer-*`** agents are
 **paused** — not invoked — so implementers green only existing/own tests and `plan-verifier` will
@@ -336,7 +342,7 @@ drafts `specs/TEMPLATE.md` into `specs/<module>/SPEC-NN-YYYY-MM-DD-<slug>.md`, a
 `specs/INDEX.md`, and applies `Supersedes` links. Because a subagent **cannot** ask the user, every
 decision it can't resolve becomes a `[NEEDS CLARIFICATION: NC-n]` marker returned for follow-up —
 it never guesses to look finished. It runs standalone (an unattended draft) or is driven by the
-`spec-creator` loop skill, which closes those markers interactively (surface via `AskUserQuestion`
+`write-spec` loop skill, which closes those markers interactively (surface via `AskUserQuestion`
 → re-invoke in **resolve mode** to fold answers in). The split is now **capability-driven**: the
 only thing that must live in the main thread is the live Q&A; everything else is autonomous.
 
@@ -346,7 +352,7 @@ only thing that must live in the main thread is the live Q&A; everything else is
   Non-goals), and **EARS** acceptance criteria (one testable statement per `AC-N`), sitting
   upstream of `implementation-planner` (which owns the HOW).
 - **Autonomous, deferrable clarification** — instead of blocking on the user, the agent emits
-  `[NEEDS CLARIFICATION]` markers (forcing Status `draft`) so it can run headless; the `spec-creator`
+  `[NEEDS CLARIFICATION]` markers (forcing Status `draft`) so it can run headless; the `write-spec`
   loop resolves them when a human is present. `AskUserQuestion` is unavailable to subagents, so this
   marker round-trip is what keeps the writer both autonomous and honest.
 - **Write-scope isolation** — a dedicated subagent whose sole permitted write target is

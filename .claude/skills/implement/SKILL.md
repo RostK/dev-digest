@@ -1,7 +1,7 @@
 ---
 name: implement
-description: "Executes an already-approved SDD plan through build → review → fix → gate for the DevDigest repo. Takes a persisted plans/PLAN-*.md (the HOW — produced SEPARATELY via implementation-planner) and optionally its spec, fans out implementer-* per task unit (parallel, worktree-isolated), runs the review gates (plan-verifier + architecture-reviewer + /code-review) in parallel, drives a BOUNDED post-review fix loop, and stops at the pre-push gate. It ORCHESTRATES only — writes no code itself; the main thread owns user Q&A, parallel fan-out, /code-review, and worktree integration. Spec authoring (/spec-creator) and planning (implementation-planner) are run manually before this."
-when_to_use: "Trigger phrases: '/implement', 'implement the plan', 'execute plans/PLAN-...', 'build from this plan', 'run the SDD implementation'. Requires an existing plans/PLAN-*.md — if there is no plan yet, run implementation-planner first (and /spec-creator before that). Explicit, user-invoked: it fans out many workers and writes code, so start it only on request."
+description: "Executes an already-approved SDD plan through build → review → fix → gate for the DevDigest repo. Takes a persisted plans/PLAN-*.md (the HOW — produced SEPARATELY via implementation-planner) and optionally its spec, fans out implementer-* per task unit (parallel, worktree-isolated), runs the review gates (plan-verifier + architecture-reviewer + /code-review) in parallel, drives a BOUNDED post-review fix loop, and stops at the pre-push gate. It ORCHESTRATES only — writes no code itself; the main thread owns user Q&A, parallel fan-out, /code-review, and worktree integration. Spec authoring (/write-spec) and planning (implementation-planner) are run manually before this."
+when_to_use: "Trigger phrases: '/implement', 'implement the plan', 'execute plans/PLAN-...', 'build from this plan', 'run the SDD implementation'. Requires an existing plans/PLAN-*.md — if there is no plan yet, run implementation-planner first (and /write-spec before that). Explicit, user-invoked: it fans out many workers and writes code, so start it only on request."
 version: 0.1.0
 ---
 
@@ -9,7 +9,7 @@ version: 0.1.0
 
 You **orchestrate** the implementation tail of Spec-Driven Development: take an **already-approved
 plan** and drive it through **build → review → fix → gate**. The upstream steps — the spec
-(`/spec-creator`) and the plan (`implementation-planner`) — are run **separately, by hand**, before
+(`/write-spec`) and the plan (`implementation-planner`) — are run **separately, by hand**, before
 you. You start from their output.
 
 You run in the **main thread** and **write no code yourself**. Every heavy phase is delegated to a
@@ -46,7 +46,7 @@ INTAKE (read plans/PLAN-*.md) ─► BUILD (implementer-* ∥, integrate worktre
 ## Hard boundaries
 1. **You never write code.** All edits go through `implementer-*`. You orchestrate, ask, and integrate.
 2. **A plan is required.** If no `plans/PLAN-*.md` is provided or found, stop and tell the user to
-   run `implementation-planner` first (and `/spec-creator` before that). Do not invent a plan.
+   run `implementation-planner` first (and `/write-spec` before that). Do not invent a plan.
 3. **Never proceed on red.** A build wave hands off only when its tests + typecheck are green; a
    worker that returns `blocked` stops that unit until you resolve it.
 4. **Bounded fix loop** — stops on convergence, no-progress, or the round cap; never spins forever.
@@ -110,7 +110,7 @@ Collect the three reports by reference.
    - **Discuss** = `SMELL` / `UNPLANNED` / low-confidence / nit → surface to the user; don't auto-fix.
 3. **Escalate plan/spec defects.** If a finding shows the **plan or spec** was wrong (not just the
    code), stop and take it to the user — it needs a re-plan (`implementation-planner`) or a spec
-   amendment (`/spec-creator`), run separately, not a blind code patch.
+   amendment (`/write-spec`), run separately, not a blind code patch.
 4. **Dispatch fixes.** Send each blocking finding to the matching `implementer-*`, scoped to the
    finding's files, in a worktree; it must keep tests + typecheck green. A `plan-verifier`
    `NOT FOUND` may need a small new task unit (missing behavior), not just an edit. **Integrate**
@@ -131,13 +131,16 @@ Collect the three reports by reference.
 - **Final report:** plan path (+ traced `SPEC-NN`) · files changed · test results · review verdicts
   **before → after** the fix loop · remaining accepted gaps (including the expected test-evidence
   ones) · branch state (ready to push / PR, or blocked and why).
+- *(Optional)* offer **`/review-run`** to capture a retrospective of THIS run (agents, tokens,
+  what was hard / duplicated / missed, recommendations) — run it now, while the per-agent telemetry
+  is still fresh in context, before it scrolls out.
 
 ---
 
 ## Interaction points (all `AskUserQuestion`, main-thread only)
 Each fix-loop round decision (Phase 3) · the ship decision (Phase 4). Everything else runs
 delegated and unattended. (Spec/plan clarifications happened earlier, in the separate
-`/spec-creator` and `implementation-planner` steps.)
+`/write-spec` and `implementation-planner` steps.)
 
 ## Parallelism rules
 Independent subagents go in **one message**: same-wave implementers (Phase 1), the three review
