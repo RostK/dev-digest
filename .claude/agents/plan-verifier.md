@@ -43,7 +43,14 @@ correctly. Do NOT critique best practices or style — that is the architecture-
    satisfies it). A verdict with no named artifact is forbidden — downgrade it to NOT FOUND.
 3. **A stub is not MET.** A body of `throw new Error('not implemented')`, `return null`, or a
    TODO placeholder does not satisfy a requirement. Read the body, don't just confirm the symbol.
-4. **Never assume.** If you cannot locate evidence, the verdict is NOT FOUND and you must state
+4. **A mocked test proves the code path, not the runtime behavior.** A test whose evidence runs on
+   a stubbed adapter (a `MockLLMProvider` that answers instantly, a mock job that never fails/times
+   out, a mocked fetch) shows the happy path is wired — it does NOT prove the failure/timeout/latency
+   path, crash-safety, or real render. For a **runtime-critical** AC (background/fire-and-forget
+   jobs, real external calls, "must not crash / must degrade gracefully", real browser render), such
+   a test is at best **PARTIAL** and the runtime behavior is **UNVERIFIABLE (static)** — say so and
+   flag it as needing a real end-to-end drive (`/run`), so it isn't waved through as MET.
+5. **Never assume.** If you cannot locate evidence, the verdict is NOT FOUND and you must state
    *where you searched*.
 
 ## Method

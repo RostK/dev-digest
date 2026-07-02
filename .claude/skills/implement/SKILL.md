@@ -23,8 +23,8 @@ return a short summary.
 
 ```
 INTAKE (read plans/PLAN-*.md) ─► BUILD (implementer-* ∥, integrate worktrees) ─►
-  REVIEW ( plan-verifier ‖ architecture-reviewer ‖ /code-review ) ─► FIX LOOP ─►╴gate╶─►
-  pr-self-review ─► report
+  REVIEW ( plan-verifier ‖ architecture-reviewer ‖ /code-review ) ─► FIX LOOP ─►
+  VERIFY (drive the real app end-to-end, NOT mocks) ─►╴gate╶─► pr-self-review ─► report
 ```
 
 ## Current toggles (token economy — read this)
@@ -52,6 +52,12 @@ INTAKE (read plans/PLAN-*.md) ─► BUILD (implementer-* ∥, integrate worktre
 4. **Bounded fix loop** — stops on convergence, no-progress, or the round cap; never spins forever.
 5. **Secrets & do-not-touch** discipline (root `CLAUDE.md`): no secrets in logs/DB/git, no
    hand-edited migrations, no linter, ignore `server/clones/**`.
+6. **Mocked-green ≠ done.** Every gate below runs on MOCKS (implementers green their own tests
+   with stubbed adapters; the review gates read code statically). None of them exercise runtime
+   behavior. You MUST drive the real feature end-to-end (Phase 3.5) before the ship gate — a build
+   that passes every gate can still crash at runtime. (SPEC-03: a fire-and-forget generation job's
+   failure crashed the whole API; all mocked tests + all three review gates passed — only driving
+   the real app via `/run` caught it.)
 
 ---
 
@@ -122,6 +128,30 @@ Collect the three reports by reference.
    was fixed and what remains, and ask the user: keep iterating / accept-with-gaps / stop. Never
    loop silently or forever.
 
+## Phase 3.5 — VERIFY (real functionality, NOT mocks)
+
+Green mocked tests + clean static review do **not** prove the feature works. Before the gate,
+**drive the actual built feature end-to-end and observe real behavior** — the runtime path every
+test mocked away.
+
+- **Launch the real stack and exercise the flow the diff touches.** Invoke **`/run`** (or `/verify`):
+  Postgres + API + web, then hit the new route with real data, trigger the real background job /
+  external call, click through the new UI, read the response / screenshot. The app as a user meets
+  it — not an `import`-and-`console.log`.
+- **Target what the mocks hide:** background/fire-and-forget jobs (real failure + timeout paths),
+  real LLM/HTTP calls (latency, hangs, error shapes), process-level behavior (unhandled rejections,
+  crashes), and anything whose test uses a stub that "resolves instantly / never fails / returns a
+  fixture". A `MockLLMProvider` that answers in 1 ms can never hit the timeout that crashes prod.
+- A runtime bug found here is a **blocking finding** → fix it via a Phase-3 dispatch **plus a
+  regression test that reproduces it** (red→green, at the layer that would have caught it), then
+  re-verify. Do NOT accept a "the gates were green" as a reason to skip this.
+- Motivating case (SPEC-03 onboarding): every mocked unit/integration/client test AND all three
+  review gates (plan-verifier 24/24, architecture 0-violations, /code-review 0-bugs) passed — yet a
+  slow generation job's failure took down the entire API. Only `/run` surfaced it.
+
+Skip ONLY when the diff has no runtime surface (docs / tests / config-only). Any change to product
+source has one — drive it.
+
 ## Phase 4 — GATE & REPORT
 
 - **`/pr-self-review`** (Skill) over the whole diff — the pre-push gate; it blocks on any critical.
@@ -129,8 +159,9 @@ Collect the three reports by reference.
   hold. Only run git-outbound commands on explicit confirmation.
 - *(Optional)* offer **`doc-writer`** (Task) to document the feature from the finished work / plan.
 - **Final report:** plan path (+ traced `SPEC-NN`) · files changed · test results · review verdicts
-  **before → after** the fix loop · remaining accepted gaps (including the expected test-evidence
-  ones) · branch state (ready to push / PR, or blocked and why).
+  **before → after** the fix loop · **runtime verification** (what real flow you drove in Phase 3.5
+  + what it found/fixed) · remaining accepted gaps (including the expected test-evidence ones) ·
+  branch state (ready to push / PR, or blocked and why).
 - *(Optional)* offer **`/review-run`** to capture a retrospective of THIS run (agents, tokens,
   what was hard / duplicated / missed, recommendations) — run it now, while the per-agent telemetry
   is still fresh in context, before it scrolls out.
