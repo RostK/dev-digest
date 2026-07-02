@@ -120,5 +120,10 @@
       "security": "security",
       "custom": "custom"
     }
+  },
+  "context": {
+    "title": "Project context to use",
+    "note": "Any agent using this skill inherits these documents.",
+    "serializesAs": "SERIALIZES AS"
   }
 }

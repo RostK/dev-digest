@@ -7,6 +7,7 @@ import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { IntentService } from './intent-service.js';
+import { ProjectContextService } from './project-context.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
 import { composeSmartDiff } from './smart-diff.js';
@@ -32,13 +33,21 @@ export class ReviewService {
   private repo: ReviewRepository;
   private agents: Container['agentsRepo'];
   private intent: IntentService;
+  private projectContext: ProjectContextService;
   private executor: ReviewRunExecutor;
 
   constructor(private container: Container) {
     this.repo = new ReviewRepository(container.db);
     this.agents = container.agentsRepo;
     this.intent = new IntentService(container, this.repo);
-    this.executor = new ReviewRunExecutor(container, this.repo, this.agents, this.intent);
+    this.projectContext = new ProjectContextService(container);
+    this.executor = new ReviewRunExecutor(
+      container,
+      this.repo,
+      this.agents,
+      this.intent,
+      this.projectContext,
+    );
   }
 
   // ===========================================================================

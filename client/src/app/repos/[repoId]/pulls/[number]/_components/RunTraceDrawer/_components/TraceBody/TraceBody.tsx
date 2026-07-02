@@ -66,6 +66,9 @@ export function TraceBody({ trace, findings }: { trace: RunTrace; findings: Find
           <Stat label={t("trace.stat.tokens")} val={formatTokens(stats.tokens_in, stats.tokens_out)} />
           <Stat label={t("trace.stat.cost")} val={formatCostCompact(stats.cost_usd)} />
           <Stat label={t("trace.stat.findings")} val={stats.findings} />
+          {stats.specs_tokens != null && (
+            <Stat label={t("trace.stat.specsTokens")} val={stats.specs_tokens} />
+          )}
         </div>
       </TraceSection>
 

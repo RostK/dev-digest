@@ -2,6 +2,7 @@ import type { Container } from '../../platform/container.js';
 import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import type { IntentService } from './intent-service.js';
+import type { ProjectContextService } from './project-context.js';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -47,6 +48,7 @@ export class ReviewRunExecutor {
     private repo: ReviewRepository,
     private agents: Container['agentsRepo'],
     private intent: IntentService,
+    private projectContext: ProjectContextService,
   ) {}
 
   /**
@@ -212,6 +214,22 @@ export class ReviewRunExecutor {
         runLog.info(`skills: ${skillBodies.length} enabled skill(s) attached to the prompt`);
       }
 
+      // T6 — Project Context: this agent's effective own + skill-inherited
+      // context docs (T5's `effectiveContextPaths`), read from the repo clone
+      // and grouped own-then-inherited into the engine's flat `specs` slot.
+      // Best-effort per file (a missing/unreadable doc is skipped, never
+      // fails the run); an empty effective set → specs: [] → omitted below,
+      // byte-identical to the pre-feature prompt.
+      const projectContext = await this.projectContext.build(
+        { owner: repo.owner, name: repo.name },
+        await this.agents.effectiveContextPaths(agent.id),
+      );
+      if (projectContext.specs.length) {
+        runLog.info(
+          `project context: ${projectContext.specsRead.length} doc(s) attached (${projectContext.specsTokens} tok)`,
+        );
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -227,6 +245,10 @@ export class ReviewRunExecutor {
         // L02 — enabled, ordered skill bodies. Omitted when none, so the prompt
         // (and the trace's skills block) is identical to the pre-skills shape.
         ...(skillBodies.length ? { skills: skillBodies } : {}),
+        // T6 — Project Context (own + inherited docs), grouped by
+        // ProjectContextService.build. Omitted when the effective set had no
+        // readable doc — same omit-when-empty contract as the other slots.
+        ...(projectContext.specs.length ? { specs: projectContext.specs } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),
@@ -303,6 +325,9 @@ export class ReviewRunExecutor {
           tokens_out: tokensOut,
           findings: findingRows.length,
           grounding,
+          // T6 — tokens attributed to the Project Context slot; 0 when the
+          // effective set had no readable doc.
+          specs_tokens: projectContext.specsTokens,
         },
         prompt_assembly: outcome.assembly,
         tool_calls: outcome.chunks.map((c) => ({
@@ -313,7 +338,9 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        // T6 — successfully-read Project Context paths (own then inherited);
+        // a skipped path is EXCLUDED (AC-14).
+        specs_read: projectContext.specsRead,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
