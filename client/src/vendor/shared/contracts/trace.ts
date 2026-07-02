@@ -41,9 +41,10 @@ export const PromptAssembly = z.object({
   skills: z.string().nullish(),
   memory: z.string().nullish(),
   specs: z.string().nullish(),
-  /** Callers-of-changed-symbols digest (repo-intel); null when absent. */
+  /** Callers-of-changed-symbols digest (T1.3); null when absent. */
   callers: z.string().nullish(),
-  /** Repo skeleton / map (repo-intel); null when absent. */
+  /** Repo skeleton / map (T3); null when absent. Enables per-slot token
+      attribution in the run trace. */
   repo_map: z.string().nullish(),
   /** PR author's description/body (truncated); null when absent. */
   pr_description: z.string().nullish(),
@@ -69,6 +70,9 @@ export const RunStats = z.object({
   cost_usd: z.number().nullish(),
   findings: z.number().int(),
   grounding: z.string(),
+  /** Tokens attributed to the specs prompt slot (per-slot token attribution);
+      null when absent, mirroring the other optional per-slot stats. */
+  specs_tokens: z.number().int().nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 

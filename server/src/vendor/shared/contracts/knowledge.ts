@@ -268,3 +268,25 @@ export const AgentVersion = z.object({
   created_at: z.string(),
 });
 export type AgentVersion = z.infer<typeof AgentVersion>;
+
+// ---- Project Context ----
+// Which source folder a project-context doc was pulled from — drives the badge
+// shown next to each doc in the context picker UI.
+export const ContextBadge = z.enum(['specs', 'docs', 'insights']);
+export type ContextBadge = z.infer<typeof ContextBadge>;
+
+export const ProjectContextDoc = z.object({
+  path: z.string().min(1),
+  badge: ContextBadge,
+  tokens: z.number().int().min(0),
+  used_by: z.number().int().min(0),
+  // 0..1 ratio; the client renders it as a %.
+  coverage: z.number().min(0).max(1),
+});
+export type ProjectContextDoc = z.infer<typeof ProjectContextDoc>;
+
+export const ContextAttachment = z.object({
+  path: z.string().min(1),
+  order: z.number().int().min(0),
+});
+export type ContextAttachment = z.infer<typeof ContextAttachment>;

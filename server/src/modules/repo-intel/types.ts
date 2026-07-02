@@ -121,6 +121,18 @@ export interface FileRankRow {
   percentile: number;
 }
 
+// ---------------------------------------------------------------------------
+// Context-doc discovery (SPEC-02 T3, facade method `discoverContextDocs`).
+// ---------------------------------------------------------------------------
+
+/** A markdown context doc found under a specs/docs/insights root in the clone. */
+export interface DiscoveredDoc {
+  /** Repo-relative, forward-slash-normalized path. */
+  path: string;
+  /** Derived from the NEAREST matching ancestor directory. */
+  badge: 'specs' | 'docs' | 'insights';
+}
+
 export interface RepoMapResult {
   text: string;
   tokens: number;
