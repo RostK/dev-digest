@@ -21,6 +21,7 @@
     "skills": "Skills",
     "agents": "Agents",
     "conventions": "Conventions",
+    "project-context": "Project Context",
     "eval": "Eval Dashboard",
     "memory": "Memory",
     "multi-agent": "Multi-Agent Review",

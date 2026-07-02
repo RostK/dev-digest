@@ -16,8 +16,41 @@ import { SkillsService } from './service.js';
  *   PUT    /skills/:id             → update (bumps version when the body changes)
  *   DELETE /skills/:id             → delete (versions + agent links cascade)
  *   GET    /skills/:id/versions    → body history (newest first)
+ *   GET    /skills/:id/context     → own Project Context docs (ordered)
+ *   POST   /skills/:id/context     → replace the ordered set of attached docs
  *   POST   /skills/import/preview  → parse md/zip → body-only preview (no save, no exec)
  */
+
+/**
+ * Defense-in-depth path-safety guard for an attached context doc path (security
+ * A05) — re-checked at read time (T6). Rejects: `..` traversal segments, an
+ * absolute path, a drive letter (`C:`), a URL scheme (`http://`), and anything
+ * not ending in `.md` (Project Context only ever attaches markdown).
+ */
+const isSafeContextPath = (p: string): boolean => {
+  if (!p || p.startsWith('/') || p.startsWith('\\')) return false;
+  if (/^[a-zA-Z]:/.test(p)) return false; // drive letter, e.g. C:\...
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(p)) return false; // scheme://, e.g. http://
+  if (p.split(/[\\/]/).some((seg) => seg === '..')) return false;
+  return p.toLowerCase().endsWith('.md');
+};
+
+const ContextPathValue = z
+  .string()
+  .min(1)
+  .refine(isSafeContextPath, { message: 'Unsafe context doc path' });
+
+/**
+ * Ordered set of context doc paths to attach (AC-6, AC-8: paths only, never
+ * text). Each entry is either a plain path string or a `{ path, order }`
+ * ContextAttachment — either way the persisted `order` is the array POSITION,
+ * never a client-supplied value, so the set can't be corrupted by gaps/dupes.
+ */
+const ContextPathEntry = z.union([
+  ContextPathValue,
+  z.object({ path: ContextPathValue, order: z.number().int().optional() }),
+]);
+const SetContextBody = z.array(ContextPathEntry);
 
 const CreateSkillBody = z.object({
   name: z.string().min(1),
@@ -96,6 +129,25 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     if (!versions) throw new NotFoundError('Skill not found');
     return versions;
   });
+
+  app.get('/skills/:id/context', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const docs = await service.contextDocs(workspaceId, req.params.id);
+    if (!docs) throw new NotFoundError('Skill not found');
+    return docs;
+  });
+
+  app.post(
+    '/skills/:id/context',
+    { schema: { params: IdParams, body: SetContextBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const paths = req.body.map((entry) => (typeof entry === 'string' ? entry : entry.path));
+      const docs = await service.setContextDocs(workspaceId, req.params.id, paths);
+      if (!docs) throw new NotFoundError('Skill not found');
+      return docs;
+    },
+  );
 
   // Raise the body limit so a base64-encoded upload (≈1.37× the raw bytes) fits;
   // the service still caps the DECODED size at MAX_IMPORT_BYTES.

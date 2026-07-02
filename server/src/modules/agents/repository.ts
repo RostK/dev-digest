@@ -1,9 +1,13 @@
 import { and, asc, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import type { CiFailOn, ContextAttachment, Provider, ReviewStrategy } from '@devdigest/shared';
 import { DEFAULT_AGENT_DESCRIPTION, INITIAL_AGENT_VERSION } from './constants.js';
 import { isConfigChange } from './helpers.js';
+import {
+  resolveEffectiveContextPaths,
+  type EffectiveContextPaths,
+} from '../_shared/project-context.js';
 
 /**
  * A2 — agents data-access. Owns `agents`, `agent_versions`, and the
@@ -273,5 +277,72 @@ export class AgentsRepository {
     await this.db
       .insert(t.agentSkills)
       .values(entries.map((e, i) => ({ agentId, skillId: e.skillId, order: i, enabled: e.enabled })));
+  }
+
+  // ---- agent_context_docs (Project Context attach — T5) -------------------
+
+  /** Own context docs attached to an agent, ordered ascending (AC-4, AC-8: paths only, never text). */
+  async contextDocsForAgent(agentId: string): Promise<ContextAttachment[]> {
+    return this.db
+      .select({ path: t.agentContextDocs.path, order: t.agentContextDocs.order })
+      .from(t.agentContextDocs)
+      .where(eq(t.agentContextDocs.agentId, agentId))
+      .orderBy(asc(t.agentContextDocs.order));
+  }
+
+  /**
+   * Replace the full set of context docs attached to an agent with `paths`, in the
+   * given order (order = array index). Mirrors `setSkills`: delete-then-insert.
+   * No per-doc `enabled` column exists — AC-4 forbids per-doc enable in v1; detach
+   * (omit) a path to remove it from the set.
+   */
+  async setContextDocs(agentId: string, paths: string[]): Promise<void> {
+    await this.db.delete(t.agentContextDocs).where(eq(t.agentContextDocs.agentId, agentId));
+    if (paths.length === 0) return;
+    await this.db
+      .insert(t.agentContextDocs)
+      .values(paths.map((path, order) => ({ agentId, path, order })));
+  }
+
+  /**
+   * Effective Project Context for an agent (AC-7): its OWN attached docs plus docs
+   * INHERITED from its enabled skills, deduped via `resolveEffectiveContextPaths`
+   * (own wins; else first position among inherited, order preserved within each).
+   *
+   * The inherited join mirrors `enabledSkillBodies`: only ENABLED bindings of
+   * ENABLED skills contribute, and a skill must be in the SAME workspace as the
+   * agent (defense-in-depth — the write-time guard already blocks a cross-tenant
+   * skill link; this keeps the read safe too so a skill's context docs can't leak
+   * across tenants). A disabled binding or a globally-disabled skill contributes
+   * NO inherited docs.
+   */
+  async effectiveContextPaths(agentId: string): Promise<EffectiveContextPaths> {
+    const ownRows = await this.db
+      .select({ path: t.agentContextDocs.path })
+      .from(t.agentContextDocs)
+      .where(eq(t.agentContextDocs.agentId, agentId))
+      .orderBy(asc(t.agentContextDocs.order));
+
+    const inheritedRows = await this.db
+      .select({ path: t.skillContextDocs.path })
+      .from(t.agentSkills)
+      .innerJoin(t.skills, eq(t.agentSkills.skillId, t.skills.id))
+      .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
+      .innerJoin(t.skillContextDocs, eq(t.skillContextDocs.skillId, t.skills.id))
+      .where(
+        and(
+          eq(t.agentSkills.agentId, agentId),
+          eq(t.agentSkills.enabled, true),
+          eq(t.skills.enabled, true),
+          // Same-workspace guard on the join — see enabledSkillBodies above.
+          eq(t.skills.workspaceId, t.agents.workspaceId),
+        ),
+      )
+      .orderBy(asc(t.agentSkills.order), asc(t.skillContextDocs.order));
+
+    return resolveEffectiveContextPaths(
+      ownRows.map((r) => r.path),
+      inheritedRows.map((r) => r.path),
+    );
   }
 }

@@ -1,0 +1,37 @@
+{
+  "page": {
+    "headingPrefix": "Project Context — ",
+    "crumbLab": "Skills Lab",
+    "crumbTitle": "Project Context",
+    "subtitle": "Markdown discovered under specs/, docs/, or insights/ folders that reviewers can be pointed at.",
+    "docCount": "{count, plural, one {# document discovered} other {# documents discovered}}",
+    "repoFallback": "the active repo",
+    "loadError": "Could not load project context documents.",
+    "noRepo": {
+      "title": "No repo selected",
+      "body": "Add or select a repo to browse its project context documents."
+    },
+    "empty": {
+      "title": "No project context documents found",
+      "body": "Add markdown under a specs/, docs/, or insights/ folder anywhere in the repo and it will show up here."
+    }
+  },
+  "badge": {
+    "specs": "specs",
+    "docs": "docs",
+    "insights": "insights"
+  },
+  "row": {
+    "usedBy": "{count, plural, one {Used by # agent} other {Used by # agents}}",
+    "coverage": "{pct}% coverage",
+    "tokens": "{count} tok"
+  },
+  "list": {
+    "filterPlaceholder": "Filter…",
+    "dragHint": "Drag to reorder",
+    "selectedCount": "{selected} of {total} attached",
+    "totalTokens": "{count} tokens total",
+    "warningLine": "Large context set — roughly {count} tokens will be added to every review prompt.",
+    "empty": "No documents match your filter."
+  }
+}

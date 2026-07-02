@@ -4,6 +4,7 @@ import type {
   AgentSkillLink,
   AgentVersion,
   CiFailOn,
+  ContextAttachment,
   ModelInfo,
   Provider,
   ReviewStrategy,
@@ -11,6 +12,7 @@ import type {
 import { AgentsRepository, type SkillBindingInput } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 import { NotFoundError } from '../../platform/errors.js';
+import type { EffectiveContextPaths } from '../_shared/project-context.js';
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -197,6 +199,46 @@ export class AgentsService {
     if (found.size !== unique.length) {
       throw new NotFoundError('Skill not found');
     }
+  }
+
+  /**
+   * Own context docs attached to an agent, ordered (AC-4). Workspace-scoped:
+   * returns undefined when the agent isn't in this workspace (route → 404).
+   */
+  async contextDocs(workspaceId: string, agentId: string): Promise<ContextAttachment[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    return this.repo.contextDocsForAgent(agentId);
+  }
+
+  /**
+   * Replace the agent's own context docs — ordered paths ONLY, never text
+   * (AC-8). Workspace-scoped: returns undefined when the agent isn't in this
+   * workspace (route → 404) — mirrors the guard `setSkills` applies.
+   */
+  async setContextDocs(
+    workspaceId: string,
+    agentId: string,
+    paths: string[],
+  ): Promise<ContextAttachment[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    await this.repo.setContextDocs(agentId, paths);
+    return this.repo.contextDocsForAgent(agentId);
+  }
+
+  /**
+   * Effective Project Context for an agent: own docs + docs inherited from its
+   * enabled skills, deduped (AC-7). Workspace-scoped: returns undefined when the
+   * agent isn't in this workspace.
+   */
+  async effectiveContextPaths(
+    workspaceId: string,
+    agentId: string,
+  ): Promise<EffectiveContextPaths | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    return this.repo.effectiveContextPaths(agentId);
   }
 
   /**
