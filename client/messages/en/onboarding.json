@@ -1,17 +1,58 @@
 {
-  "title": "Onboarding Tour",
-  "sections": "Sections",
-  "sectionCount": "{count} sections",
+  "crumb": "Onboarding Tour",
+  "heading": "Onboarding for {repo}",
+  "subtitle": "Generated from index of {count} files · last refreshed {relative}",
+  "onThisPage": "On this page",
+  "share": "Share link",
+  "shareCopied": "Link copied",
   "regenerate": "Regenerate",
-  "regenerating": "Regenerating…",
+  "regenerating": "Updating…",
+  "stale": "Stale",
   "unknownError": "Unknown error",
+  "confirmRegenerate": {
+    "title": "Regenerate the onboarding tour?",
+    "body": "This replaces the current tour with a freshly generated one from the latest repo index.",
+    "confirm": "Regenerate",
+    "cancel": "Cancel"
+  },
+  "sections": {
+    "architecture": {
+      "title": "Architecture overview"
+    },
+    "criticalPaths": {
+      "title": "Critical paths",
+      "usedBy": "used by {count} routes",
+      "open": "Open",
+      "empty": "No critical paths yet."
+    },
+    "howToRun": {
+      "title": "How to run locally",
+      "copyStep": "Copy step {n}",
+      "copied": "Copied",
+      "empty": "No setup steps yet."
+    },
+    "readingPath": {
+      "title": "Guided reading path",
+      "open": "Open",
+      "empty": "No reading path yet."
+    },
+    "firstTasks": {
+      "title": "First tasks",
+      "empty": "No first tasks yet."
+    }
+  },
   "generate": {
     "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
+    "body": "DevDigest indexes the repo, then writes a 5-section guided tour: architecture overview, critical paths, how to run locally, a guided reading path, and first tasks.",
     "cta": "Generate onboarding tour",
-    "generating": "Generating…"
+    "generating": "Generating the onboarding tour…"
+  },
+  "notIndexed": {
+    "title": "Index this repo first",
+    "body": "The onboarding tour is generated from the repo index — index this repo before generating a tour."
   },
   "loadError": {
-    "title": "Couldn’t load the onboarding tour"
+    "title": "Couldn’t load the onboarding tour",
+    "body": "Something went wrong loading the onboarding tour."
   }
 }

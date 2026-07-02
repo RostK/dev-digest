@@ -26,7 +26,9 @@ export function isTextInput(el: EventTarget | null): boolean {
 export function activeKeyFor(pathname: string): string {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/multi-agent")) return "multi-agent";
-  if (pathname.includes("/onboarding")) return "onboarding-tour";
+  // Repo-scoped tour route only — the bare /onboarding add-repo route (no
+  // /repos/ prefix) must NOT mis-highlight this nav item.
+  if (pathname.includes("/repos/") && pathname.includes("/onboarding")) return "onboarding-tour";
   if (pathname.startsWith("/project-context")) return "project-context";
   if (pathname.includes("/context")) return "context";
   if (pathname.includes("/conventions")) return "conventions";
