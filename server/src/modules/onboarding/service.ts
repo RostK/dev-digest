@@ -71,6 +71,12 @@ export class OnboardingService {
     const job = await this.container.jobs.enqueue(workspaceId, ONBOARDING_JOB_KIND, {
       repoId,
     } satisfies OnboardingJobPayload);
+    // Fire-and-forget (AC-23): the route returns the handle without awaiting the
+    // job. `JobRunner.enqueue().done` REJECTS if the job fails/times out (a slow
+    // or unreachable model), so swallow it here — the failure is already recorded
+    // on the `jobs` row (polled via GET status). Without this the rejection is
+    // unhandled and crashes the API process.
+    void job.done.catch(() => {});
     return { job_id: job.id };
   }
 
@@ -133,9 +139,12 @@ export class OnboardingService {
     const inFlight = await this.repo.findInFlightRegen(repoId);
     if (inFlight) return;
 
-    await this.container.jobs.enqueue(workspaceId, ONBOARDING_JOB_KIND, {
+    const job = await this.container.jobs.enqueue(workspaceId, ONBOARDING_JOB_KIND, {
       repoId,
     } satisfies OnboardingJobPayload);
+    // Fire-and-forget: swallow the `done` rejection so a failed auto-regen job
+    // never surfaces as an unhandled rejection / process crash (see enqueueGeneration).
+    void job.done.catch(() => {});
   }
 
   // ===========================================================================

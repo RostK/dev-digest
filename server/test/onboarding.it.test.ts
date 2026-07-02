@@ -226,6 +226,45 @@ d('onboarding module (DB-backed, SPEC-03 T3)', () => {
     await app.close();
   });
 
+  it('safety: a generation job that throws is recorded `failed` and does NOT crash the API (fire-and-forget `done` rejection is swallowed)', async () => {
+    const db = pg.handle.db;
+    const repo = await makeRepo(db, workspaceId);
+    // A repo-intel whose getRepoMap throws inside the job handler — OUTSIDE
+    // generateOnboarding's own try/catch (which would otherwise fall back to the
+    // skeleton). runGenerationJob rejects → JobRunner marks the job `failed` and
+    // re-throws into the fire-and-forget `done` promise. Without the service's
+    // `void job.done.catch()`, that rejection is unhandled and crashes the process.
+    const app = await buildApp({
+      config: config(),
+      db: pg.handle.db,
+      overrides: {
+        repoIntel: {
+          ...fakeRepoIntel({ filesIndexed: 5, updatedAt: new Date() }),
+          getRepoMap: async () => {
+            throw new Error('boom');
+          },
+        },
+        git: new MockGitClient({ files: {} }),
+        llm: { openrouter: new MockLLMProvider('openai', { structured: ONBOARDING_FIXTURE }) },
+      },
+    });
+
+    const res = await app.inject({ method: 'POST', url: `/repos/${repo.id}/onboarding/generate` });
+    expect(res.statusCode).toBe(202);
+    const { job_id: jobId } = res.json() as { job_id: string };
+
+    const status = await pollJobStatus(app, repo.id, jobId);
+    expect(status.status).toBe('failed');
+
+    // The process survived the failed fire-and-forget job — a subsequent request
+    // still succeeds (an unhandled `done` rejection would have crashed it).
+    const getRes = await app.inject({ method: 'GET', url: `/repos/${repo.id}/onboarding` });
+    expect(getRes.statusCode).toBe(200);
+    expect((getRes.json() as { tour: unknown }).tour).toBeNull();
+
+    await app.close();
+  });
+
   it('AC-9: Regenerate overwrites the single onboarding row for the repo (still exactly one row, generated_at advances)', async () => {
     const db = pg.handle.db;
     const repo = await makeRepo(db, workspaceId);
