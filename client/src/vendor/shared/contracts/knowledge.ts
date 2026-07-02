@@ -29,6 +29,12 @@ export type Conformance = z.infer<typeof Conformance>;
 export const OnboardingLink = z.object({
   label: z.string(),
   path: z.string(),
+  // Free-text "why this matters" note. Model-authored.
+  rationale: z.string().nullish(),
+  // Deterministic "used by N routes/callers" count, filled by the SERVER from
+  // repo-intel blast-radius AFTER generation — nullish so LLM output validates
+  // before the count is attached (never model-authored — see AC-12).
+  used_by: z.number().int().nullish(),
 });
 export type OnboardingLink = z.infer<typeof OnboardingLink>;
 
@@ -45,6 +51,23 @@ export const Onboarding = z.object({
   sections: z.array(OnboardingSection),
 });
 export type Onboarding = z.infer<typeof Onboarding>;
+
+export const OnboardingJobStatus = z.object({
+  job_id: z.string(),
+  status: z.enum(['queued', 'running', 'done', 'failed']),
+  error: z.string().nullish(),
+});
+export type OnboardingJobStatus = z.infer<typeof OnboardingJobStatus>;
+
+export const OnboardingResponse = z.object({
+  tour: Onboarding.nullable(),
+  generated_at: z.string().nullable(),
+  files_indexed: z.number().int(),
+  indexed: z.boolean(),
+  stale: z.boolean(),
+  job: OnboardingJobStatus.nullish(),
+});
+export type OnboardingResponse = z.infer<typeof OnboardingResponse>;
 
 // ---- Eval ----
 export const EvalPerTrace = z.object({

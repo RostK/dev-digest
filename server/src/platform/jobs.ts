@@ -15,6 +15,16 @@ import { withTimeout, withRetry } from './resilience.js';
 
 export type JobHandler = (payload: unknown, ctx: { jobId: string }) => Promise<void>;
 
+/**
+ * Fired after a job reaches `done`. FAIL-SOFT by design: a hook that throws
+ * is caught + logged by the runner and never affects the job's own status —
+ * see the invocation site in `enqueue()`.
+ */
+export type JobCompletionHook = (
+  payload: unknown,
+  ctx: { jobId: string; workspaceId: string; kind: string },
+) => Promise<void>;
+
 export interface JobRunnerOptions {
   concurrency?: number;
   timeoutMs?: number;
@@ -30,6 +40,7 @@ export interface EnqueuedJob {
 export class JobRunner {
   private queue: PQueue;
   private handlers = new Map<string, JobHandler>();
+  private completionHooks = new Map<string, JobCompletionHook[]>();
   private timeoutMs: number;
   private retries: number;
 
@@ -44,6 +55,17 @@ export class JobRunner {
 
   register(kind: string, handler: JobHandler): void {
     this.handlers.set(kind, handler);
+  }
+
+  /**
+   * Register a completion hook for a job kind. Symmetric to `register()`.
+   * Multiple hooks per kind are allowed and run in registration order, each
+   * isolated in its own try/catch (see the invocation site in `enqueue()`).
+   */
+  onCompleted(kind: string, hook: JobCompletionHook): void {
+    const hooks = this.completionHooks.get(kind);
+    if (hooks) hooks.push(hook);
+    else this.completionHooks.set(kind, [hook]);
   }
 
   async enqueue(workspaceId: string, kind: string, payload: unknown): Promise<EnqueuedJob> {
@@ -84,6 +106,8 @@ export class JobRunner {
           .update(t.jobs)
           .set({ status: 'done', finishedAt: new Date() })
           .where(eq(t.jobs.id, jobId));
+
+        await this.runCompletionHooks(kind, payload, { jobId, workspaceId, kind });
       } catch (err) {
         await this.db
           .update(t.jobs)
@@ -103,5 +127,27 @@ export class JobRunner {
   /** Wait for the queue to drain (useful in tests). */
   async onIdle(): Promise<void> {
     await this.queue.onIdle();
+  }
+
+  /**
+   * Invoke every completion hook registered for `kind`, FAIL-SOFT: each call
+   * is isolated in its own try/catch so a throwing hook is logged and never
+   * rethrown — it must not affect the job's `done` status nor block sibling
+   * hooks for the same kind.
+   */
+  private async runCompletionHooks(
+    kind: string,
+    payload: unknown,
+    ctx: { jobId: string; workspaceId: string; kind: string },
+  ): Promise<void> {
+    const hooks = this.completionHooks.get(kind);
+    if (!hooks || hooks.length === 0) return;
+    for (const hook of hooks) {
+      try {
+        await hook(payload, ctx);
+      } catch (err) {
+        console.error(`[jobs] completion hook for kind '${kind}' threw (job ${ctx.jobId}):`, err);
+      }
+    }
   }
 }
