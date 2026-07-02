@@ -243,6 +243,11 @@ export class MockGitHubClient implements GitHubClient {
 export interface MockGitOptions {
   diff?: string;
   files?: Record<string, string>;
+  /** Per-repo file contents keyed by `${owner}/${name}` — lets a test give the
+   *  SAME path DIFFERENT content in two repos to prove per-clone isolation
+   *  (a read is scoped to the PR's own clone). Falls back to the flat `files`
+   *  map when a repo has no entry, so existing tests keep working unchanged. */
+  filesByRepo?: Record<string, Record<string, string>>;
   /** Name-only diff result (drives the incremental indexer's "changed files since X" path). */
   diffNameOnly?: string[];
   /** Override `currentHead()` so tests can simulate "sha unchanged since last index". */
@@ -290,8 +295,9 @@ export class MockGitClient implements GitClient {
   async log(): Promise<GitCommit[]> {
     return [{ sha: 'a1b2c3d4', message: 'init', author: 'marisa.koch', date: '2026-06-01' }];
   }
-  async readFile(_repo: RepoRef, path: string): Promise<string> {
-    return this.opts.files?.[path] ?? '';
+  async readFile(repo: RepoRef, path: string): Promise<string> {
+    const perRepo = this.opts.filesByRepo?.[`${repo.owner}/${repo.name}`];
+    return perRepo?.[path] ?? this.opts.files?.[path] ?? '';
   }
 }
 

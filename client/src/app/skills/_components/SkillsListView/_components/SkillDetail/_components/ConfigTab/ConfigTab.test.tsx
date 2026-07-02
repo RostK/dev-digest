@@ -99,7 +99,7 @@ describe("ConfigTab — Project context to use (SPEC-02 T9)", () => {
     expect(screen.getByText("specs/cross/SPEC-01.md")).toBeInTheDocument();
     expect(screen.getByText("docs/architecture.md")).toBeInTheDocument();
 
-    // Unattached docs render A→Z (see mergeContextItems), so target the row by
+    // Unattached docs render A→Z (see mergeContextDocs), so target the row by
     // its path rather than list position, then click that row's checkbox.
     const specRow = screen.getByText("specs/cross/SPEC-01.md").closest('[role="listitem"]');
     fireEvent.click(within(specRow as HTMLElement).getByRole("checkbox"));

@@ -7,7 +7,7 @@ import messages from "../../../../../../../../messages/en/runs.json"; // apps/we
 // Mock the trace hooks so the drawer renders without a query client / SSE.
 const TRACE: RunTrace = {
   config: { agent: "Security", version: "1", provider: "openai", model: "gpt-4.1", pr: 482, source: "local" },
-  stats: { duration_ms: 8200, tokens_in: 12000, tokens_out: 1500, findings: 2, grounding: "2/2 passed" },
+  stats: { duration_ms: 8200, tokens_in: 12000, tokens_out: 1500, findings: 2, grounding: "2/2 passed", specs_tokens: 1730 },
   prompt_assembly: {
     system: "You are a reviewer.",
     skills: "### skill",
@@ -72,5 +72,11 @@ describe("A5 Run Trace drawer (smoke)", () => {
     expect(
       screen.getByText("All endpoints must return camelCase JSON per specs/api-contracts.md."),
     ).toBeInTheDocument();
+  });
+
+  it("surfaces the specs-tokens stat tile when present (AC-15)", () => {
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+    expect(screen.getByText("SPECS TOKENS")).toBeInTheDocument();
+    expect(screen.getByText("1730")).toBeInTheDocument();
   });
 });

@@ -11,14 +11,14 @@ import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, FormField, TextInput, SelectInput, Textarea, Toggle, Icon } from "@devdigest/ui";
-import type { ContextAttachment, ProjectContextDoc, Skill, SkillType } from "@devdigest/shared";
+import type { Skill, SkillType } from "@devdigest/shared";
 import { useUpdateSkill, useDeleteSkill } from "@/lib/hooks/skills";
 import { useSkillContext, useSetSkillContext } from "@/lib/hooks/skillContext";
 import { useProjectContextDocs } from "@/lib/hooks/projectContext";
 import { useActiveRepo } from "@/lib/repo-context";
 import { useToast } from "@/lib/toast";
 import { SKILL_TYPE_OPTIONS } from "@/lib/skill-type";
-import { ContextDocList, type ContextDocListItem } from "@/components/ContextDocList";
+import { ContextDocList, type ContextDocListItem, mergeContextDocs, move } from "@/components/ContextDocList";
 import { s } from "./styles";
 
 /** The canonical prompt header this section serializes under — a literal
@@ -56,46 +56,6 @@ const cs = {
     whiteSpace: "pre-wrap",
   } satisfies React.CSSProperties,
 } as const;
-
-function toItem(doc: ProjectContextDoc): ContextDocListItem {
-  return { path: doc.path, badge: doc.badge, tokens: doc.tokens };
-}
-
-/**
- * Merge every discovered project-context doc with the skill's saved
- * attachment into one ordered list: attached docs first (in saved order),
- * then the remaining discovered docs appended (unattached, path A→Z) so a
- * never-attached doc can still be toggled on. Mirrors the Agent Editor
- * Skills tab's `mergeBindings` (AgentEditor/_components/SkillsTab/helpers.ts).
- */
-function mergeContextItems(
-  docs: ProjectContextDoc[],
-  attachment: ContextAttachment[],
-): ContextDocListItem[] {
-  const byPath = new Map(docs.map((d) => [d.path, d]));
-  const attachedPaths = new Set<string>();
-  const attached: ContextDocListItem[] = [];
-  for (const a of [...attachment].sort((x, y) => x.order - y.order)) {
-    const doc = byPath.get(a.path);
-    if (!doc) continue;
-    attachedPaths.add(a.path);
-    attached.push(toItem(doc));
-  }
-  const unattached = docs
-    .filter((d) => !attachedPaths.has(d.path))
-    .sort((a, b) => a.path.localeCompare(b.path))
-    .map(toItem);
-  return [...attached, ...unattached];
-}
-
-/** Pure array move used by drag-reorder (mirrors SkillsTab/helpers.ts `move`). */
-function moveItem<T>(arr: T[], from: number, to: number): T[] {
-  const next = arr.slice();
-  const [item] = next.splice(from, 1);
-  if (item === undefined) return arr;
-  next.splice(to, 0, item);
-  return next;
-}
 
 export function ConfigTab({ skill }: { skill: Skill }) {
   const t = useTranslations("skills");
@@ -145,8 +105,9 @@ export function ConfigTab({ skill }: { skill: Skill }) {
   // mutation writes the cache, so this reflects the persisted attach set).
   React.useEffect(() => {
     if (allDocs && attachment) {
-      setContextItems(mergeContextItems(allDocs, attachment));
-      setContextSelected(new Set(attachment.map((a) => a.path)));
+      const merged = mergeContextDocs(allDocs, attachment);
+      setContextItems(merged.items);
+      setContextSelected(merged.selected);
     }
   }, [skill.id, allDocs, attachment]);
 
@@ -167,7 +128,7 @@ export function ConfigTab({ skill }: { skill: Skill }) {
 
   const reorderContextDocs = (from: number, to: number) => {
     if (!contextItems) return;
-    persistContext(moveItem(contextItems, from, to), contextSelected);
+    persistContext(move(contextItems, from, to), contextSelected);
   };
 
   const attachedPaths = (contextItems ?? [])

@@ -9,11 +9,10 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { EmptyState } from "@devdigest/ui";
-import { ContextDocList, type ContextDocListItem } from "@/components/ContextDocList";
+import { ContextDocList, type ContextDocListItem, mergeContextDocs, move } from "@/components/ContextDocList";
 import { useActiveRepo } from "@/lib/repo-context";
 import { useProjectContextDocs } from "@/lib/hooks/projectContext";
 import { useAgentContext, useSetAgentContext } from "@/lib/hooks/agentContext";
-import { mergeContextDocs, move } from "./helpers";
 import { s } from "./styles";
 
 export function ContextTab({ agentId }: { agentId: string }) {

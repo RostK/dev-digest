@@ -263,6 +263,71 @@ d('reviews × Project Context injection (DB-backed, SPEC-02 T6)', () => {
     await app.close();
   });
 
+  it('AC-19: the SAME path resolves to each PR\'s OWN clone, never another repo\'s (per-clone isolation)', async () => {
+    const db = pg.handle.db;
+    // Create both repos FIRST so we can key file content by their real names.
+    const { repo: repoA, pr: prA } = await setupRepoAndPr(db, workspaceId);
+    const { repo: repoB, pr: prB } = await setupRepoAndPr(db, workspaceId);
+
+    // The IDENTICAL repo-relative path, but DIFFERENT content in each clone.
+    const app = await buildApp({
+      config: config(),
+      db,
+      overrides: {
+        git: new MockGitClient({
+          diff: DIFF,
+          filesByRepo: {
+            [`${repoA.owner}/${repoA.name}`]: { 'docs/shared.md': 'REPO A version of the doc.' },
+            [`${repoB.owner}/${repoB.name}`]: { 'docs/shared.md': 'REPO B version of the doc.' },
+          },
+        }),
+        tokenizer: FAKE_TOKENIZER,
+        llm: { openai: new MockLLMProvider('openai', { structured: REVIEW_FIXTURE }) },
+      },
+    });
+
+    // One agent per repo, each attaching the SAME repo-relative path.
+    const agentA = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'CloneA', provider: 'openai', model: 'gpt-4.1', system_prompt: 'x' },
+      })
+    ).json();
+    const agentB = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'CloneB', provider: 'openai', model: 'gpt-4.1', system_prompt: 'x' },
+      })
+    ).json();
+    await db.insert(t.agentContextDocs).values({ agentId: agentA.id, path: 'docs/shared.md', order: 0 });
+    await db.insert(t.agentContextDocs).values({ agentId: agentB.id, path: 'docs/shared.md', order: 0 });
+
+    const runA = (
+      await app.inject({ method: 'POST', url: `/pulls/${prA.id}/review`, payload: { agentId: agentA.id } })
+    ).json().runs[0].run_id;
+    const runB = (
+      await app.inject({ method: 'POST', url: `/pulls/${prB.id}/review`, payload: { agentId: agentB.id } })
+    ).json().runs[0].run_id;
+    // Two concurrent background reviews on a slow (Docker) machine → give the
+    // waits room so the trace is persisted before we read prompt_assembly.
+    await waitForPrRuns(db, prA.id, { expected: 1, timeoutMs: 30_000 });
+    await waitForPrRuns(db, prB.id, { expected: 1, timeoutMs: 30_000 });
+
+    const traceA = (await app.inject({ method: 'GET', url: `/runs/${runA}/trace` })).json();
+    const traceB = (await app.inject({ method: 'GET', url: `/runs/${runB}/trace` })).json();
+
+    // Each run injected ITS OWN repo's version of the identical path — a bug
+    // that read from the wrong clone would leak the other repo's content here.
+    expect(traceA.prompt_assembly.specs).toContain('REPO A version of the doc.');
+    expect(traceA.prompt_assembly.specs).not.toContain('REPO B version of the doc.');
+    expect(traceB.prompt_assembly.specs).toContain('REPO B version of the doc.');
+    expect(traceB.prompt_assembly.specs).not.toContain('REPO A version of the doc.');
+
+    await app.close();
+  });
+
   it('a missing/unreadable doc is skipped and the run still succeeds (AC-13)', async () => {
     const db = pg.handle.db;
     const app = await appWith({ 'docs/exists.md': 'Present.' });
