@@ -34,7 +34,7 @@ export default async function briefRoutes(appBase: FastifyInstance) {
     { schema: { params: IdParams } },
     async (req): Promise<{ brief: Brief }> => {
       const { workspaceId } = await getContext(app.container, req);
-      const brief = await service.generateBrief(workspaceId, req.params.id);
+      const brief = await service.generateBrief(workspaceId, req.params.id, (m) => req.log.info(m));
       return { brief };
     },
   );
