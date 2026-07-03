@@ -1,0 +1,263 @@
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import type { BlastRadius, Brief, LLMProvider } from '@devdigest/shared';
+import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
+import { buildApp } from '../src/app.js';
+import { loadConfig } from '../src/platform/config.js';
+import { seed } from '../src/db/seed.js';
+import * as t from '../src/db/schema.js';
+import { MockLLMProvider } from '../src/adapters/mocks.js';
+import type { BlastService } from '../src/modules/blast/service.js';
+
+/**
+ * DB-backed brief module: persist→cache-read (AC-5), regenerate overwrite
+ * (AC-6), POST returns the brief (AC-7), cross-workspace not-found (AC-11),
+ * and the one-model-call budget (AC-15). The blast facade is stubbed (its own
+ * pipeline is covered by blast.it.test.ts) so this focuses on the brief
+ * module's own wiring: assembly → ONE model call → grounding → persistence.
+ */
+const hasDocker = await dockerAvailable();
+const d = hasDocker ? describe : describe.skip;
+
+const FULL_MAP: BlastRadius = {
+  changed_symbols: [{ name: 'rateLimit', file: 'src/lib/rate.ts', kind: 'function' }],
+  downstream: [
+    {
+      symbol: 'rateLimit',
+      callers: [{ name: 'handler', file: 'src/api/public/index.ts', line: 23 }],
+      endpoints_affected: ['GET /api/public/items'],
+      crons_affected: [],
+    },
+  ],
+  summary: '1 changed symbol with 1 caller across 1 impacted endpoint.',
+};
+
+function fakeBlast(map: BlastRadius): BlastService {
+  return { blastMapForPr: async () => map } as unknown as BlastService;
+}
+
+const MODEL_FIXTURE = {
+  what: 'Adds rate limiting to the public API.',
+  why: 'Prevents abuse of public endpoints.',
+  risks: [
+    {
+      kind: 'perf',
+      title: 'Hot path change',
+      explanation: 'The rate limiter sits on every public request.',
+      severity: 'medium',
+      file_refs: ['src/lib/rate.ts', 'src/made/up/path.ts'], // 2nd is NOT real → dropped
+    },
+  ],
+  review_focus: [
+    { path: 'src/api/public/index.ts', line: 23, reason: 'New caller of rateLimit' },
+    { path: 'src/invented.ts', line: 1, reason: 'not real' }, // dropped
+  ],
+};
+
+d('Brief module (DB-backed)', () => {
+  let pg: PgFixture;
+  beforeAll(async () => {
+    pg = await startPg();
+  });
+  afterAll(async () => {
+    await pg?.stop();
+  });
+
+  async function setup(opts: { name: string; llm?: LLMProvider; blast?: BlastRadius }) {
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    const { workspaceId } = await seed(pg.handle.db);
+    const [repo] = await pg.handle.db
+      .insert(t.repos)
+      .values({
+        workspaceId,
+        owner: 'acme',
+        name: opts.name,
+        fullName: `acme/${opts.name}`,
+        clonePath: `/mock/clones/acme/${opts.name}`,
+      })
+      .returning();
+    const [pr] = await pg.handle.db
+      .insert(t.pullRequests)
+      .values({
+        workspaceId,
+        repoId: repo!.id,
+        number: 1,
+        title: 'Add rate limiting',
+        author: 'marisa.koch',
+        branch: 'feat/rate-limit',
+        base: 'main',
+        headSha: 'deadbeef',
+      })
+      .returning();
+    await pg.handle.db.insert(t.prFiles).values([
+      { prId: pr!.id, path: 'src/lib/rate.ts', additions: 40, deletions: 2 },
+    ]);
+    const app = await buildApp({
+      config,
+      db: pg.handle.db,
+      overrides: {
+        blast: fakeBlast(opts.blast ?? FULL_MAP),
+        ...(opts.llm ? { llm: { openai: opts.llm } } : {}),
+      },
+    });
+    return { app, prId: pr!.id, repoId: repo!.id, workspaceId };
+  }
+
+  it('GET returns null before any generation, with ZERO LLM calls', async () => {
+    const complete = vi.fn();
+    const completeStructured = vi.fn();
+    const spyLlm = { complete, completeStructured } as unknown as LLMProvider;
+    const { app, prId } = await setup({ name: 'demo-empty', llm: spyLlm });
+
+    const res = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toBeNull();
+    expect(completeStructured).not.toHaveBeenCalled();
+
+    await app.close();
+  });
+
+  it('POST generates, persists, and returns the brief; GET then reads the CACHE with the LLM UNCALLED (AC-5, AC-7)', async () => {
+    const llm = new MockLLMProvider('openai', { structuredBySchema: { BriefProposal: MODEL_FIXTURE } });
+    const { app, prId } = await setup({ name: 'demo-persist', llm });
+
+    const postRes = await app.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+    expect(postRes.statusCode).toBe(200);
+    const { brief } = postRes.json() as { brief: Brief };
+    expect(brief.what).toBe(MODEL_FIXTURE.what);
+    // Grounding drop (AC-3): the invented file_ref / review_focus path is gone.
+    expect(brief.risks[0]!.file_refs).toEqual(['src/lib/rate.ts']);
+    expect(brief.review_focus).toEqual([
+      { path: 'src/api/public/index.ts', line: 23, reason: 'New caller of rateLimit' },
+    ]);
+    expect(brief.generated_at).toBeTruthy();
+    expect(llm.calls.filter((c) => c.method === 'completeStructured')).toHaveLength(1); // AC-15
+
+    const getRes = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect(getRes.statusCode).toBe(200);
+    expect((getRes.json() as Brief).what).toBe(MODEL_FIXTURE.what);
+    // The cache read must not have spent another model call.
+    expect(llm.calls.filter((c) => c.method === 'completeStructured')).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('POST regenerate overwrites a prior good brief (AC-6)', async () => {
+    const llm = new MockLLMProvider('openai', { structuredBySchema: { BriefProposal: MODEL_FIXTURE } });
+    const { app, prId } = await setup({ name: 'demo-regen', llm });
+
+    const first = await app.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+    const firstBrief = (first.json() as { brief: Brief }).brief;
+
+    const updatedFixture = { ...MODEL_FIXTURE, what: 'Updated: adds stricter rate limiting.' };
+    llm.calls.length = 0;
+    (llm as unknown as { opts: { structuredBySchema: Record<string, unknown> } }).opts.structuredBySchema = {
+      BriefProposal: updatedFixture,
+    };
+
+    const second = await app.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+    const secondBrief = (second.json() as { brief: Brief }).brief;
+
+    expect(secondBrief.what).toBe('Updated: adds stricter rate limiting.');
+    expect(secondBrief.what).not.toBe(firstBrief.what);
+
+    const cached = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect((cached.json() as Brief).what).toBe('Updated: adds stricter rate limiting.');
+
+    await app.close();
+  });
+
+  it('falls back to the deterministic brief on a throwing model and does NOT clobber a prior good brief (AC-8)', async () => {
+    const goodLlm = new MockLLMProvider('openai', { structuredBySchema: { BriefProposal: MODEL_FIXTURE } });
+    const { app, prId } = await setup({ name: 'demo-fallback', llm: goodLlm });
+
+    const first = await app.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+    const goodBrief = (first.json() as { brief: Brief }).brief;
+    expect(goodBrief.what).toBe(MODEL_FIXTURE.what);
+
+    // Swap in a throwing LLM and regenerate — the fallback must NOT overwrite
+    // the good brief already persisted above.
+    const throwingLlm = {
+      complete: async () => {
+        throw new Error('no key');
+      },
+      completeStructured: async () => {
+        throw new Error('no key');
+      },
+    } as unknown as LLMProvider;
+    const app2 = await buildApp({
+      config: loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv),
+      db: pg.handle.db,
+      overrides: { blast: fakeBlast(FULL_MAP), llm: { openai: throwingLlm } },
+    });
+    const second = await app2.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+    expect(second.statusCode).toBe(200);
+    const fallbackReturn = (second.json() as { brief: Brief }).brief;
+    // No-clobber: returns the EXISTING good brief, not a degraded one.
+    expect(fallbackReturn.what).toBe(MODEL_FIXTURE.what);
+
+    const cached = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect((cached.json() as Brief).what).toBe(MODEL_FIXTURE.what);
+
+    await app.close();
+    await app2.close();
+  });
+
+  it('persists the deterministic fallback when NO brief exists yet (AC-8)', async () => {
+    const throwingLlm = {
+      complete: async () => {
+        throw new Error('no key');
+      },
+      completeStructured: async () => {
+        throw new Error('no key');
+      },
+    } as unknown as LLMProvider;
+    const { app, prId } = await setup({ name: 'demo-first-fallback', llm: throwingLlm });
+
+    const res = await app.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+    expect(res.statusCode).toBe(200);
+    const brief = (res.json() as { brief: Brief }).brief;
+    expect(brief.risks).toEqual([]);
+    expect(brief.review_focus).toEqual([]);
+    expect(['low', 'medium', 'high']).toContain(brief.risk_level);
+
+    const cached = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect((cached.json() as Brief).what).toBe(brief.what);
+
+    await app.close();
+  });
+
+  it('404s GET and POST for a PR outside the workspace (AC-11)', async () => {
+    const { app } = await setup({ name: 'demo-404' });
+    const missingId = '00000000-0000-0000-0000-000000000000';
+
+    const getRes = await app.inject({ method: 'GET', url: `/pulls/${missingId}/brief` });
+    expect(getRes.statusCode).toBe(404);
+
+    const postRes = await app.inject({ method: 'POST', url: `/pulls/${missingId}/brief` });
+    expect(postRes.statusCode).toBe(404);
+
+    await app.close();
+  });
+
+  it('makes AT MOST ONE model call per generate (AC-15) — blastMapForPr is stubbed, no 2nd call', async () => {
+    const complete = vi.fn().mockRejectedValue(new Error('unexpected complete() call'));
+    const completeStructured = vi.fn().mockResolvedValue({
+      data: MODEL_FIXTURE,
+      model: 'gpt-4.1',
+      tokensIn: 10,
+      tokensOut: 10,
+      costUsd: 0,
+      raw: '{}',
+      attempts: 1,
+    });
+    const spyLlm = { complete, completeStructured } as unknown as LLMProvider;
+    const { app, prId } = await setup({ name: 'demo-one-call', llm: spyLlm });
+
+    await app.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+
+    expect(complete).not.toHaveBeenCalled();
+    expect(completeStructured).toHaveBeenCalledTimes(1);
+
+    await app.close();
+  });
+});
