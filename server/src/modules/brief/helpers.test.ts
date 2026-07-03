@@ -164,6 +164,29 @@ describe('buildBriefMessages', () => {
     expect(headerLine).not.toContain(craftedTitle);
   });
 
+  it('does NOT re-truncate spec doc content — the loader applies the cap ONCE before this function runs (FIX 4)', async () => {
+    // buildBriefMessages must pass spec content through AS-IS: truncation to
+    // the brief's MAX_SPEC_CHARS_BRIEF (4_000) now happens once, at the
+    // `loadSpecDocs(..., MAX_SPEC_CHARS_BRIEF)` call site in brief/service.ts.
+    // A helper-level re-truncation here would silently mask a caller that
+    // forgot to cap, so assert content longer than 4_000 chars survives
+    // untouched through buildBriefMessages.
+    const longContent = 'x'.repeat(5_000);
+    const messages = await buildBriefMessages({
+      intent: undefined,
+      blast: EMPTY_BLAST,
+      counts: [],
+      realFiles: [],
+      linkedIssue: undefined,
+      specDocs: [{ path: 'docs/spec.md', content: longContent }],
+      findings: [],
+    });
+    const user = messages[1]!.content;
+    const untrustedMatch = user.match(/<untrusted source="spec">([\s\S]*?)<\/untrusted>/);
+    expect(untrustedMatch).not.toBeNull();
+    expect(untrustedMatch![1]).toContain(longContent);
+  });
+
   it('keeps the spec-doc wrapUntrusted label a fixed constant even with a path containing quote/bracket chars (#2)', async () => {
     const trickyPath = 'docs/"weird><path.md';
     const messages = await buildBriefMessages({

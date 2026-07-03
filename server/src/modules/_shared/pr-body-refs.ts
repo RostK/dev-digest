@@ -43,11 +43,16 @@ export async function loadLinkedIssue(
  * `docs/specs/foo.md`) from the cloned working tree. Path-traversal-guarded
  * (no `..`, no absolute / drive paths, allowlisted extensions), capped, and
  * each read fail-soft. NEVER fetches external URLs.
+ *
+ * `maxChars` defaults to this module's own `MAX_SPEC_CHARS` (8_000, the
+ * intent-service cap) — pass a caller-specific cap (e.g. the brief module's
+ * lower 4_000) to apply it ONCE here instead of re-truncating downstream.
  */
 export async function loadSpecDocs(
   container: Container,
   repoRef: { owner: string; name: string },
   body: string | null,
+  maxChars: number = MAX_SPEC_CHARS,
 ): Promise<{ path: string; content: string }[]> {
   if (!body) return [];
   const candidates = new Set<string>();
@@ -67,7 +72,7 @@ export async function loadSpecDocs(
     try {
       const content = await container.git.readFile(repoRef, rel);
       if (content && content.trim().length > 0) {
-        out.push({ path: rel, content: content.slice(0, MAX_SPEC_CHARS) });
+        out.push({ path: rel, content: content.slice(0, maxChars) });
       }
     } catch {
       // referenced file not in the clone (or repo not cloned yet) — skip

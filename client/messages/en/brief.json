@@ -20,7 +20,7 @@
   "score": "Score {value}",
   "cost": "${value}",
   "costUnknown": "—",
-  "findings": "{count} findings",
+  "findings": "{count, plural, one {# finding} other {# findings}}",
   "noReview": "No review yet",
   "generate": "Generate brief",
   "regenerate": "Regenerate",

@@ -1,8 +1,9 @@
 import type { CSSProperties } from "react";
 
 export const s = {
-  /** Bordered elevated card, mirroring IntentCard/BlastTab (a fixed-height card
-   *  pair on the Overview grid, header pinned, body scrolling). */
+  /** Bordered elevated card, mirroring IntentCard/BlastTab's look on the Overview
+   *  grid. Unlike those, this card has no fixed height / scroll region — it grows
+   *  with its content (no maxHeight/overflowY set here). */
   card: {
     border: "1px solid var(--border)",
     background: "var(--bg-elevated)",

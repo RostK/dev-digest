@@ -176,7 +176,7 @@ describe("PrBriefCard", () => {
     expect(screen.getByText("Approved")).toBeInTheDocument();
     expect(screen.getByText("Score 88")).toBeInTheDocument();
     expect(screen.getByText("$0.0123")).toBeInTheDocument();
-    expect(screen.getByText("1 findings")).toBeInTheDocument();
+    expect(screen.getByText("1 finding")).toBeInTheDocument();
   });
 
   it("shows a neutral empty top row when there is no review yet", () => {

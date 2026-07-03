@@ -251,6 +251,21 @@ d('Brief module (DB-backed)', () => {
     await app.close();
   });
 
+  it('GET returns null for a malformed persisted pr_brief.json blob instead of an off-contract object (FIX 1)', async () => {
+    const { app, prId } = await setup({ name: 'demo-malformed' });
+
+    // Manually insert a jsonb blob that does NOT satisfy the Brief contract
+    // (missing every required field) — simulates a stale/corrupt row bypassing
+    // the service's normal write path.
+    await pg.handle.db.insert(t.prBrief).values({ prId, json: { garbage: true } as never });
+
+    const res = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toBeNull();
+
+    await app.close();
+  });
+
   it('makes AT MOST ONE model call per generate (AC-15) — blastMapForPr is stubbed, no 2nd call', async () => {
     const complete = vi.fn().mockRejectedValue(new Error('unexpected complete() call'));
     const completeStructured = vi.fn().mockResolvedValue({

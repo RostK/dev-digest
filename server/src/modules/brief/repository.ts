@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import type { Brief } from '@devdigest/shared';
+import { Brief } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 
@@ -16,7 +16,13 @@ export class BriefRepository {
 
   async getBrief(prId: string): Promise<Brief | null> {
     const [row] = await this.db.select().from(t.prBrief).where(eq(t.prBrief.prId, prId));
-    return (row?.json as Brief | undefined) ?? null;
+    if (!row) return null;
+    // `pr_brief.json` is unconstrained jsonb and this read has no response
+    // schema at the route — validate at the read boundary instead of an
+    // unchecked cast. A malformed/stale blob degrades to "no brief" (null)
+    // rather than serializing an off-contract object to the client.
+    const parsed = Brief.safeParse(row.json);
+    return parsed.success ? parsed.data : null;
   }
 
   /** Always overwrite (AC-6: an explicit Regenerate always wins) — the good-brief path. */

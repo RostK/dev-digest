@@ -3,6 +3,7 @@ import type { Container } from '../../platform/container.js';
 import { NotFoundError } from '../../platform/errors.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { loadLinkedIssue, loadSpecDocs } from '../_shared/pr-body-refs.js';
+import { MAX_SPEC_CHARS_BRIEF } from './constants.js';
 import { BriefRepository } from './repository.js';
 import {
   BriefProposal,
@@ -62,7 +63,11 @@ export class BriefService {
     ]);
 
     const linkedIssue = repoRef ? await loadLinkedIssue(this.container, repoRef, pull.body) : undefined;
-    const specDocs = repoRef ? await loadSpecDocs(this.container, repoRef, pull.body) : [];
+    // Brief's own cap (4_000), applied ONCE here — distinct from the
+    // intent-service caller, which keeps the loader's 8_000 default.
+    const specDocs = repoRef
+      ? await loadSpecDocs(this.container, repoRef, pull.body, MAX_SPEC_CHARS_BRIEF)
+      : [];
 
     const findings: FindingInput[] = reviews
       .flatMap((r) => r.findings)
@@ -91,10 +96,11 @@ export class BriefService {
       onLog,
     );
 
+    const persisted: Brief = { ...brief.value, generated_at: new Date().toISOString() };
+
     if (!brief.degraded) {
       // Non-degraded generation ALWAYS overwrites (AC-6: an explicit
       // Regenerate always wins).
-      const persisted: Brief = { ...brief.value, generated_at: new Date().toISOString() };
       await this.repo.upsertBrief(prId, persisted);
       return persisted;
     }
@@ -102,16 +108,18 @@ export class BriefService {
     // Degraded generation: no-clobber is ATOMIC at the repository
     // (`insertBriefIfAbsent` = INSERT … ON CONFLICT DO NOTHING) — no
     // read-then-write window for a concurrent request to race.
-    const persisted: Brief = { ...brief.value, generated_at: new Date().toISOString() };
     const wrote = await this.repo.insertBriefIfAbsent(prId, persisted);
     if (wrote) return persisted;
 
     // A good brief already existed — kept it, degraded generation discarded.
     onLog?.('brief: regenerate degraded — kept existing good brief');
     const existing = await this.repo.getBrief(prId);
-    // existing must be non-null here: insertBriefIfAbsent only returns false
-    // on a conflict, which means a row is already present.
-    return existing!;
+    // A concurrent delete (or a malformed persisted blob failing the read-
+    // boundary parse) could make `existing` null even though the insert
+    // reported a conflict — don't assert non-null; fall back to returning
+    // this freshly-computed degraded value so the caller always gets a
+    // valid Brief instead of a runtime crash.
+    return existing ?? persisted;
   }
 
   /** Exactly one model call, with a deterministic-brief fallback on ANY throw,

@@ -12,7 +12,7 @@ import {
 } from '@devdigest/shared';
 import { renderPrompt } from '../../platform/prompts.js';
 import { classifyFile } from '../reviews/smart-diff.js';
-import { MAX_ISSUE_CHARS, MAX_SPEC_CHARS, RISK_HIGH_CALLERS, RISK_HIGH_ENDPOINTS, RISK_MEDIUM_CALLERS, RISK_MEDIUM_ENDPOINTS } from './constants.js';
+import { MAX_ISSUE_CHARS, RISK_HIGH_CALLERS, RISK_HIGH_ENDPOINTS, RISK_MEDIUM_CALLERS, RISK_MEDIUM_ENDPOINTS } from './constants.js';
 
 /**
  * Pure helpers for the PR Why+Risk Brief: the model-output schema, prompt
@@ -136,9 +136,11 @@ export async function buildBriefMessages(input: {
     // The doc PATH is repo-controlled but still external-ish free text (could
     // contain `"`/`>` and break out of the `<untrusted source="...">` tag if
     // interpolated into the label) — keep the label a fixed constant and put
-    // the path INSIDE the fenced content instead (#2).
+    // the path INSIDE the fenced content instead (#2). `doc.content` is
+    // already capped by the `loadSpecDocs` loader at its call site (the
+    // brief-specific `MAX_SPEC_CHARS_BRIEF`) — don't re-truncate here.
     userSections.push(
-      `## Spec/plan\n${wrapUntrusted('spec', `Path: ${doc.path}\n\n${doc.content.slice(0, MAX_SPEC_CHARS)}`)}`,
+      `## Spec/plan\n${wrapUntrusted('spec', `Path: ${doc.path}\n\n${doc.content}`)}`,
     );
   }
   userSections.push(`## Existing findings\n${renderFindings(input.findings)}`);
