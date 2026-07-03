@@ -207,7 +207,7 @@ export function FileCard({
   const hasSummary = !!summary;
 
   return (
-    <div id={`diff-file-${file.path}`} style={s.fileCard}>
+    <div style={s.fileCard}>
       <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />

@@ -25,9 +25,6 @@ export interface SmartDiffViewerProps {
   commenting?: DiffCommentApi;
   /** Per-file findings (full FindingRecord) from review data. When omitted nothing changes. */
   findingsBySeverity?: FindingsBySeverity;
-  /** File path to force-open (its role group AND file card) — deep-link scroll target
-   *  from DiffTab's ?file=&line=. Doesn't change default behavior for other files. */
-  focusPath?: string | null;
 }
 
 /* ---------- role display map ---------- */
@@ -99,7 +96,6 @@ function RoleGroup({
   commenting,
   startOpen,
   findingsBySeverity,
-  focusPath,
 }: {
   role: SmartDiffRole;
   files: { path: string; finding_lines: number[]; pseudocode_summary?: string | null }[];
@@ -107,12 +103,9 @@ function RoleGroup({
   commenting?: DiffCommentApi;
   startOpen: boolean;
   findingsBySeverity?: FindingsBySeverity;
-  /** Force this group open when it contains the deep-link focus file (even boilerplate). */
-  focusPath?: string | null;
 }) {
   const t = useTranslations("prReview");
-  const containsFocusFile = !!focusPath && files.some((f) => f.path === focusPath);
-  const [open, setOpen] = React.useState(startOpen || containsFocusFile);
+  const [open, setOpen] = React.useState(startOpen);
 
   const label = t(ROLE_LABEL_KEY[role]);
   const desc = t(ROLE_DESC_KEY[role]);
@@ -157,12 +150,9 @@ function RoleGroup({
               findingsBySeverity?.get(sdFile.path),
             );
 
-            // Core files always open; wiring/boilerplate open only when they have findings;
-            // the deep-link focus file's card is always force-opened too.
+            // Core files always open; wiring/boilerplate open only when they have findings
             const cardDefaultOpen =
-              role === "core" ||
-              sdFile.finding_lines.length > 0 ||
-              sdFile.path === focusPath;
+              role === "core" || sdFile.finding_lines.length > 0;
 
             return (
               <FileCard
@@ -235,7 +225,6 @@ export function SmartDiffViewer({
   smartDiff,
   commenting,
   findingsBySeverity,
-  focusPath,
 }: SmartDiffViewerProps) {
   const { split_suggestion } = smartDiff;
 
@@ -257,7 +246,6 @@ export function SmartDiffViewer({
           commenting={commenting}
           startOpen={group.role !== "boilerplate"}
           findingsBySeverity={findingsBySeverity}
-          focusPath={focusPath}
         />
       ))}
     </div>

@@ -203,13 +203,12 @@ No `[RESEARCH NEEDED]` gaps — every dependency is in-repo and verified.
     `latestReviewsPerAgent` (AC-13) — **not** the Brief; empty when no review. Body: `useBrief(prId)` — when `null`,
     show an explicit **Generate** button (`useGenerateBrief`), **no auto-fire** (AC-7); when present, render `risk_level`
     with color **and** label (AC-9), `what`/`why`, `risks[]`, and `review_focus[]` as `path:line` + reason +
-    `MonoLink`→ internal Diff-tab deep-link `/repos/:repoId/pulls/:number?tab=diff&file=<path>&line=<line>` (AC-12,
-    **amended 2026-07-03**: internal DevDigest diff, auto-scrolled to file:line — was `githubBlobUrl`), plus a **Regenerate**
+    `MonoLink`→`githubBlobUrl(repoFullName, headSha, path, line)` (AC-12, `github-urls.ts:24-37`), plus a **Regenerate**
     button (AC-6). Strings via `useTranslations("brief")` (AC-14). Design tokens only.
   - `.../PrBriefCard/{index.ts, styles.ts}` — create.
   - `.../PrBriefCard/PrBriefCard.test.tsx` — create: AC-7 (null → Generate, no POST; click → one POST then cache),
-    AC-9 (label+color, label without color), AC-12 (focus `path:line`+reason+internal `?tab=diff&file=…&line=…` link),
-    AC-13 (top row from review data), AC-14 (i18n + labeled links).
+    AC-9 (label+color, label without color), AC-12 (focus `path:line`+reason+blob link from head_sha), AC-13 (top row
+    from review data), AC-14 (i18n + labeled links).
   - `.../OverviewTab/OverviewTab.tsx` — modify: render `<PrBriefCard prId={prId} repoFullName={repoFullName} headSha={headSha} />`
     **above** the existing `s.brief` grid (`:18-24`). Props already available (`:9-17`), fed by `PrDetailView.tsx:142-149`.
   - `client/messages/en/brief.json` — modify: replace stale composite keys with the new `brief` namespace (title, what,
@@ -258,8 +257,7 @@ graph TD
   - `client/.../PrBriefCard/PrBriefCard.test.tsx` (RTL + Vitest, fetch/hooks mocked): AC-6/7/9/12/13/14.
 - **Runtime-only ACs — need a real `/run` drive** (per "verify real functionality, not mocks", MEMORY):
   **AC-7** (first-open null → Generate → POST → cache round-trip in the running app), **AC-6** (Regenerate overwrites
-  and re-renders), **AC-13** (top row composes real review data), **AC-12** (focus links open the internal Diff tab
-  scrolled to the right file:line — amended 2026-07-03).
+  and re-renders), **AC-13** (top row composes real review data), **AC-12** (focus links open GitHub at the right line).
   Drive the running studio on a real PR after integration; mocked tests + static review won't catch a mis-pinned blob
   URL or an empty-review top row.
 
