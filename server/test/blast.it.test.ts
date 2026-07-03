@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { LLMProvider } from '@devdigest/shared';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
@@ -114,7 +114,7 @@ d('Blast radius route (DB-backed)', () => {
         ...(opts.llm ? { llm: { anthropic: opts.llm } } : {}),
       },
     });
-    return { app, prId: pr!.id, repoId: repo!.id };
+    return { app, prId: pr!.id, repoId: repo!.id, workspaceId };
   }
 
   it('returns the mapped blast radius with the model summary (one call)', async () => {
@@ -185,6 +185,29 @@ d('Blast radius route (DB-backed)', () => {
     });
     expect(res.statusCode).toBe(200);
     expect((res.json() as { blast: { downstream: unknown[] } }).blast.downstream.length).toBeGreaterThanOrEqual(1);
+    await app.close();
+  });
+
+  it('container.blast.blastMapForPr returns the mapped map with ZERO LLM calls', async () => {
+    // A spy LLM would throw if called — proves blastMapForPr never touches it,
+    // unlike blastForPr (which makes exactly one summary call, asserted above).
+    const complete = vi.fn().mockRejectedValue(new Error('blastMapForPr must not call the model'));
+    const spyLlm = { complete } as unknown as LLMProvider;
+    const { app, workspaceId, prId } = await setup({
+      name: 'demo-zero-llm',
+      result: FULL_MAP,
+      status: 'full',
+      llm: spyLlm,
+    });
+
+    const blast = await app.container.blast.blastMapForPr(workspaceId, prId);
+
+    expect(complete).not.toHaveBeenCalled();
+    const rate = blast.downstream.find((d) => d.symbol === 'rateLimit')!;
+    expect(rate.callers.length).toBeGreaterThanOrEqual(2);
+    // No model call → the deterministic count-string summary, not the mocked text.
+    expect(blast.summary).toBe('1 changed symbol with 2 callers across 2 impacted endpoints.');
+
     await app.close();
   });
 });
