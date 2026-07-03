@@ -2,6 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { SectionLabel, Button } from "@devdigest/ui";
 import {
   DiffViewer,
@@ -18,6 +19,33 @@ import {
 import { latestReviewsPerAgent } from "@/components/SeverityIndicators/helpers";
 import { notify } from "@/lib/toast";
 import type { PrFile, FindingRecord } from "@devdigest/shared";
+
+/** Scroll to the ?file=&line= target once, when both params are present —
+ *  prefers the highlighted-line anchor (`sd-{file}-L{line}`), falling back to
+ *  the file-level anchor (`diff-file-{file}`) when that line isn't a
+ *  highlighted finding line (or the file is collapsed in smart mode). Reused
+ *  by both DiffTab render branches (Smart/Original) since file+line params
+ *  don't depend on which viewer is active. */
+function useScrollToDiffFocus(files: PrFile[]) {
+  const search = useSearchParams();
+  const file = search.get("file");
+  const lineParam = search.get("line");
+  const line = lineParam != null ? Number(lineParam) : null;
+
+  React.useEffect(() => {
+    if (!file || line == null || Number.isNaN(line)) return;
+
+    const frame = requestAnimationFrame(() => {
+      const lineId = `sd-${file}-L${line}`;
+      const fileId = `diff-file-${file}`;
+      const target = document.getElementById(lineId) ?? document.getElementById(fileId);
+      target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+    // Re-run if the target changes or the file list (re)renders (e.g. after
+    // the smart-diff/original data loads and files mount).
+  }, [file, line, files]);
+}
 
 interface DiffTabProps {
   prId: string | null;
@@ -62,6 +90,10 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
   // Comments start hidden so the diff is clean by default — toggle to reveal.
   const [showComments, setShowComments] = React.useState(false);
   const [viewMode, setViewMode] = React.useState<ViewMode>("smart");
+
+  // Deep-link support: PrBriefCard's review-focus rows link here with
+  // ?file=&line=, so scroll to that file/line once the diff renders.
+  useScrollToDiffFocus(files);
 
   const commentCount = comments?.length ?? 0;
 

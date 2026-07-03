@@ -9,6 +9,12 @@ export const RISK_COLOR: Record<RiskSeverity, { color: string; bg: string }> = {
   low: { color: "var(--ok)", bg: "var(--ok-bg)" },
 };
 
+/** Internal deep-link into this PR's Diff tab, auto-scrolled to a file:line —
+ *  review-focus rows point INSIDE the app instead of out to GitHub (AC-12). */
+export function diffFileHref(repoId: string, number: string, path: string, line: number): string {
+  return `/repos/${repoId}/pulls/${number}?tab=diff&file=${encodeURIComponent(path)}&line=${line}`;
+}
+
 /** Compact relative time for "generated {relative}" (e.g. "3h ago", "2d ago"). */
 export function relativeTimeAgo(iso: string | null | undefined): string | null {
   if (!iso) return null;

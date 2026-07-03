@@ -157,9 +157,12 @@ type is added — v1 wires these into a working card.
   or regenerate the brief of a PR outside their workspace (mirroring `BlastService.getPull(workspaceId, prId)`).
   - Verify: *.it.test.ts (cross-workspace PR → not found; row untouched)
 - **AC-12** — The `PrBriefCard` SHALL render each `review_focus[]` item (typed `ReviewFocus { path, line, reason }`)
-  as a `file:line` entry with a one-line reason and a link into the code (via `MonoLink` + `githubBlobUrl` pinned
-  to the PR's `head_sha`, as `FindingCard`/`BlastTab` do).
-  - Verify: client unit (each focus item shows `path:line` + reason + a blob link built from `head_sha`)
+  as a `file:line` entry with a one-line reason and a link to that file's change **inside DevDigest** — the PR's
+  Diff tab (`/repos/:repoId/pulls/:number?tab=diff&file=<path>&line=<line>`), auto-scrolled to the file (and to the
+  line when that line is rendered). (Superseded 2026-07-03 by user direction: the earlier draft linked out to GitHub
+  via `githubBlobUrl`; `FindingCard`/`BlastTab` still link to GitHub — the internal-diff link is Review-Focus-only.)
+  - Verify: client unit (each focus item shows `path:line` + reason + an internal `?tab=diff&file=…&line=…` link) +
+    the Diff tab scrolls to the referenced file on load when those params are present.
 - **AC-13** — The `PrBriefCard` SHALL compose the Brief **with** the PR's existing review **verdict**, **score**,
   **cost**, and **findings counts** sourced from the `reviews` module (`ReviewRecord` / `PrMeta.score` /
   `PrMeta.cost_usd` / `PrMeta.findings`), and SHALL NOT re-derive or overwrite those review signals from the Brief.

@@ -5,20 +5,21 @@
    e.g. 404/500; never offers Generate in that case, REVIEW FIX #5), and loaded
    (null shows an explicit Generate button, no auto-fire, AC-7; a present brief
    renders what/why, a color+label risk level (AC-9), risks, and review-focus
-   rows linking out to GitHub (AC-12), plus Regenerate (AC-6)). A failed
-   generate/regenerate mutation surfaces an inline error near the button
-   instead of failing silently (REVIEW FIX #5). */
+   rows linking to that file's change INSIDE the app — the PR's Diff tab,
+   auto-scrolled to file:line — instead of external GitHub (AC-12), plus
+   Regenerate (AC-6)). A failed generate/regenerate mutation surfaces an inline
+   error near the button instead of failing silently (REVIEW FIX #5). */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { useParams } from "next/navigation";
 import { Button, Badge, SectionLabel, MonoLink, Icon } from "@devdigest/ui";
 import type { Brief, Risk, ReviewFocus } from "@devdigest/shared";
 import { useBrief, useGenerateBrief } from "@/lib/hooks";
 import { usePrReviews, usePrRuns } from "@/lib/hooks/reviews";
 import { latestReviewsPerAgent } from "@/components/SeverityIndicators";
-import { githubBlobUrl } from "@/lib/github-urls";
-import { RISK_COLOR, relativeTimeAgo } from "./helpers";
+import { RISK_COLOR, diffFileHref, relativeTimeAgo } from "./helpers";
 import { s } from "./styles";
 
 type T = ReturnType<typeof useTranslations>;
@@ -29,7 +30,7 @@ interface PrBriefCardProps {
   headSha?: string | null;
 }
 
-export function PrBriefCard({ prId, repoFullName, headSha }: PrBriefCardProps) {
+export function PrBriefCard({ prId }: PrBriefCardProps) {
   const t = useTranslations("brief");
   const { data: brief, isPending, isError: briefIsError } = useBrief(prId);
   const generate = useGenerateBrief(prId);
@@ -74,13 +75,7 @@ export function PrBriefCard({ prId, repoFullName, headSha }: PrBriefCardProps) {
         )}
 
         {!briefIsError && brief != null && (
-          <BriefBody
-            brief={brief}
-            repoFullName={repoFullName}
-            headSha={headSha}
-            generateIsError={generate.isError}
-            t={t}
-          />
+          <BriefBody brief={brief} generateIsError={generate.isError} t={t} />
         )}
       </div>
     </div>
@@ -169,18 +164,14 @@ function EmptyBody({
 
 function BriefBody({
   brief,
-  repoFullName,
-  headSha,
   generateIsError,
   t,
 }: {
   brief: Brief;
-  repoFullName?: string | null;
-  headSha?: string | null;
   generateIsError: boolean;
   t: T;
 }) {
-  const canLink = !!(repoFullName && headSha);
+  const { repoId, number } = useParams<{ repoId: string; number: string }>();
   const risk = RISK_COLOR[brief.risk_level];
   const generatedAgo = relativeTimeAgo(brief.generated_at);
 
@@ -225,7 +216,7 @@ function BriefBody({
           <FocusRow
             key={`${f.path}:${f.line}:${i}`}
             focus={f}
-            href={canLink ? githubBlobUrl(repoFullName!, headSha!, f.path, f.line) : undefined}
+            href={diffFileHref(repoId, number, f.path, f.line)}
           />
         ))}
       </div>

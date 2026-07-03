@@ -8,6 +8,11 @@ import { PrBriefCard } from "./PrBriefCard";
 // Control the hooks directly so the test is hermetic (no fetch/QueryClient).
 vi.mock("@/lib/hooks", () => ({ useBrief: vi.fn(), useGenerateBrief: vi.fn() }));
 vi.mock("@/lib/hooks/reviews", () => ({ usePrReviews: vi.fn(), usePrRuns: vi.fn() }));
+// Review-focus rows now deep-link into THIS app's Diff tab (repoId/number
+// come from the route), instead of building an external GitHub blob URL.
+vi.mock("next/navigation", () => ({
+  useParams: () => ({ repoId: "repo-1", number: "42" }),
+}));
 import { useBrief, useGenerateBrief } from "@/lib/hooks";
 import { usePrReviews, usePrRuns } from "@/lib/hooks/reviews";
 
@@ -149,7 +154,7 @@ describe("PrBriefCard", () => {
     }
   });
 
-  it("shows review-focus rows as path:line + reason + a GitHub blob link from head_sha (AC-12)", () => {
+  it("shows review-focus rows as path:line + reason + an internal Diff-tab deep-link (AC-12)", () => {
     setBriefHook({ data: BRIEF, isPending: false });
     setGenerateHook();
     setReviewHooks();
@@ -162,9 +167,8 @@ describe("PrBriefCard", () => {
     const link = screen.getByText("src/lib/rate.ts:42").closest("a");
     expect(link).toHaveAttribute(
       "href",
-      "https://github.com/acme/payments-api/blob/abc123/src/lib/rate.ts#L42",
+      "/repos/repo-1/pulls/42?tab=diff&file=src%2Flib%2Frate.ts&line=42",
     );
-    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("composes the top row (verdict/score/cost/findings) from review data, not the brief (AC-13)", () => {
