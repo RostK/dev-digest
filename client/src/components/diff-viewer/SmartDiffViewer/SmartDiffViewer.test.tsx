@@ -465,4 +465,37 @@ describe("SmartDiffViewer", () => {
     // No severity badges should be visible that could toggle cards
     expect(screen.queryByRole("button", { name: /toggle finding details/i })).not.toBeInTheDocument();
   });
+
+  // ---- New: focusPath force-opens the collapsed boilerplate group + its card ----
+
+  it("focusPath in the (collapsed) boilerplate group force-opens that group and its file card", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <SmartDiffViewer
+          files={ALL_PR_FILES}
+          smartDiff={SMART_DIFF}
+          focusPath="package-lock.json"
+        />
+      </NextIntlClientProvider>,
+    );
+    // Without focusPath, "package-lock.json" is hidden (see the collapsed-by-default
+    // test above) — with focusPath set to it, the group + card must render open.
+    expect(screen.getByText("package-lock.json")).toBeInTheDocument();
+    expect(document.getElementById("diff-file-package-lock.json")).not.toBeNull();
+  });
+
+  it("focusPath on a different file does not force-open the boilerplate group (no regression)", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <SmartDiffViewer
+          files={ALL_PR_FILES}
+          smartDiff={SMART_DIFF}
+          focusPath="src/core.ts"
+        />
+      </NextIntlClientProvider>,
+    );
+    // focusPath is the core file (already open by default) — the boilerplate
+    // group must remain collapsed since it doesn't contain the focus file.
+    expect(screen.queryByText("package-lock.json")).not.toBeInTheDocument();
+  });
 });
