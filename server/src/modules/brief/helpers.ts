@@ -3,11 +3,11 @@ import { wrapUntrusted } from '@devdigest/reviewer-core';
 import {
   Brief,
   Risk,
+  RiskSeverity,
   ReviewFocus,
   type BlastRadius,
   type ChatMessage,
   type Intent,
-  type RiskSeverity,
   type SmartDiffRole,
 } from '@devdigest/shared';
 import { renderPrompt } from '../../platform/prompts.js';
@@ -20,12 +20,16 @@ import { MAX_ISSUE_CHARS, MAX_SPEC_CHARS, RISK_HIGH_CALLERS, RISK_HIGH_ENDPOINTS
  * counts-only smart-diff reduction. No I/O, no DB — mirror conventions/helpers.ts.
  */
 
-/** Model output schema — the LLM proposes `what`/`why`/risks/review_focus; the
- *  service assigns `risk_level` deterministically from the SAME risks it grounds
- *  (see AC-9) and stamps `generated_at` itself, so neither is asked of the model. */
+/** Model output schema — the LLM proposes `what`/`why`/risks/review_focus AND
+ *  `risk_level` (AC-9: assigned by the model within the ONE structured call,
+ *  constrained to the shared `RiskSeverity` enum so the model can't emit an
+ *  out-of-band value); the service only stamps `generated_at` itself.
+ *  `deterministicRiskLevel` remains as the AC-8 zero-model fallback (see
+ *  `deterministicBrief`) — it is NOT used on the model-assigned happy path. */
 export const BriefProposal = z.object({
   what: z.string(),
   why: z.string(),
+  risk_level: RiskSeverity,
   risks: z.array(Risk),
   review_focus: z.array(ReviewFocus),
 });
@@ -117,14 +121,24 @@ export async function buildBriefMessages(input: {
   userSections.push(`## Real files (the ONLY valid file_refs / review_focus.path values)\n${input.realFiles.join('\n') || '(none)'}`);
 
   if (input.linkedIssue) {
+    // Both the title AND body are attacker-controlled (external, GitHub-sourced
+    // text) — neither may sit in trusted framing (#2). Fence them TOGETHER
+    // under a fixed constant label; never interpolate untrusted text into a
+    // `wrapUntrusted` label (an attacker-chosen title could otherwise break
+    // out of the label's own quoting).
+    const title = input.linkedIssue.title;
     const body = (input.linkedIssue.body ?? '').slice(0, MAX_ISSUE_CHARS);
     userSections.push(
-      `## Linked issue #${input.linkedIssue.number}: ${input.linkedIssue.title}\n${wrapUntrusted('linked-issue', body)}`,
+      `## Linked issue #${input.linkedIssue.number}\n${wrapUntrusted('linked-issue', `Title: ${title}\n\n${body}`)}`,
     );
   }
   for (const doc of input.specDocs) {
+    // The doc PATH is repo-controlled but still external-ish free text (could
+    // contain `"`/`>` and break out of the `<untrusted source="...">` tag if
+    // interpolated into the label) — keep the label a fixed constant and put
+    // the path INSIDE the fenced content instead (#2).
     userSections.push(
-      `## Spec/plan: ${doc.path}\n${wrapUntrusted(`spec:${doc.path}`, doc.content.slice(0, MAX_SPEC_CHARS))}`,
+      `## Spec/plan\n${wrapUntrusted('spec', `Path: ${doc.path}\n\n${doc.content.slice(0, MAX_SPEC_CHARS)}`)}`,
     );
   }
   userSections.push(`## Existing findings\n${renderFindings(input.findings)}`);
@@ -138,7 +152,9 @@ export async function buildBriefMessages(input: {
 /**
  * Ground the model's proposal against the REAL file/endpoint sets (AC-3): drop
  * any `risks[].file_refs` entry and any `review_focus[]` item whose path isn't
- * in `realFiles`. Mirrors conventions/service.ts's grounding-drop.
+ * in `realFiles`. `risk_level` passes through UNCHANGED — grounding only filters
+ * file paths, it is not a risk-level source (AC-9: risk_level is model-assigned).
+ * Mirrors conventions/service.ts's grounding-drop.
  */
 export function groundBrief(proposal: BriefProposal, realFiles: Set<string>): BriefProposal {
   const risks = proposal.risks.map((r) => ({
@@ -149,11 +165,20 @@ export function groundBrief(proposal: BriefProposal, realFiles: Set<string>): Br
   return { ...proposal, risks, review_focus };
 }
 
-/** Deterministic risk_level from the blast map size (AC-9 fallback + always
- *  used to derive the persisted level — see service.ts). Mirrors
+/** Deterministic risk_level from the blast map size — used ONLY by
+ *  `deterministicBrief` (AC-8 zero-model fallback) when generation degrades;
+ *  the happy path uses the model-assigned `risk_level` instead (AC-9). Mirrors
  *  blast/summary.ts's deterministicSummary style: pure counts, no model. */
 export function deterministicRiskLevel(blast: BlastRadius): RiskSeverity {
-  const callers = blast.downstream.reduce((n, d) => n + d.callers.length, 0);
+  // De-dup callers across downstream symbols (A2): a file that calls multiple
+  // changed symbols must count ONCE, not once per symbol it calls — mirrors
+  // the endpoints Set below. Key on file+name (not file+line) so two distinct
+  // call sites for the SAME caller in one file don't double-count, while two
+  // genuinely different callers in the same file still count separately.
+  const callerKeys = new Set(
+    blast.downstream.flatMap((d) => d.callers.map((c) => `${c.file}:${c.name}`)),
+  );
+  const callers = callerKeys.size;
   const endpoints = new Set(blast.downstream.flatMap((d) => d.endpoints_affected)).size;
   if (callers >= RISK_HIGH_CALLERS || endpoints >= RISK_HIGH_ENDPOINTS) return 'high';
   if (callers >= RISK_MEDIUM_CALLERS || endpoints >= RISK_MEDIUM_ENDPOINTS) return 'medium';

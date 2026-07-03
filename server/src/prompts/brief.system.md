@@ -9,6 +9,15 @@ Produce exactly:
 - `what` — 1-2 sentences: what changed, in plain language.
 - `why` — 1-2 sentences: the motivation. Cite the linked issue or spec doc when one is
   provided; otherwise infer from the intent.
+- `risk_level` — one of `high` | `medium` | `low`, reflecting the OVERALL risk of this
+  change. Weigh ALL of: the blast radius (callers, impacted endpoints — a large,
+  widely-called change leans higher), the severity of any existing findings, and the
+  NATURE of the change itself — a small but security-sensitive or data-integrity-sensitive
+  change (auth, permissions, payments, migrations, secrets) can be `high` even with a tiny
+  blast radius, while a large, mechanical, low-risk refactor (renames, formatting,
+  test-only changes) can be `low` even with a wide blast radius. Base this ONLY on the
+  provided intent, blast radius, counts, issue, specs, and findings — never a guess about
+  code you have not been shown.
 - `risks` — 0-6 items, each `{ kind, title, explanation, severity, file_refs }`. Only
   raise a risk you can tie to the provided blast radius, findings, or spec content —
   never a generic, unsupported concern.
@@ -27,8 +36,6 @@ Grounding rules (strict):
   file outside that list — it will be dropped.
 - Base every claim ONLY on the provided intent, blast radius, counts, issue, specs, and
   findings. Do not guess at code you have not been shown.
-- Do not assign or mention a risk_level — that is computed separately from the blast
-  radius, not from your output.
 
 Output format:
 - `what`/`why`/`explanation`/`reason` are plain text (1-2 sentences each) — no markdown

@@ -8,9 +8,7 @@ import {
   BriefProposal,
   buildBriefMessages,
   deterministicBrief,
-  deterministicRiskLevel,
   groundBrief,
-  shouldPersistBrief,
   smartDiffCounts,
   type FindingInput,
 } from './helpers.js';
@@ -41,8 +39,15 @@ export class BriefService {
 
   /** Generate (or regenerate) the brief for a PR. Exactly ONE `container.llm`
    *  call on the happy path; falls back to a deterministic brief on any
-   *  failure (AC-8), persisting the fallback only when no brief exists yet. */
-  async generateBrief(workspaceId: string, prId: string): Promise<Brief> {
+   *  failure (AC-8), persisting the fallback only when no brief exists yet.
+   *  `onLog` is optional and fail-soft (mirrors `IntentService.ensureIntent`) —
+   *  a caller with a request-scoped logger (e.g. `req.log`) can pass one in;
+   *  omitting it only loses observability, never behavior. */
+  async generateBrief(
+    workspaceId: string,
+    prId: string,
+    onLog?: (msg: string) => void,
+  ): Promise<Brief> {
     const pull = await this.container.reviewRepo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
 
@@ -72,40 +77,59 @@ export class BriefService {
     const findingFiles = new Set(findings.map((f) => f.file));
     const realFiles = new Set<string>([...changedFiles, ...blastFiles, ...findingFiles]);
 
-    const brief = await this.tryGenerate({
-      workspaceId,
-      intent,
-      blast,
-      counts,
-      realFiles,
-      linkedIssue,
-      specDocs,
-      findings,
-    });
+    const brief = await this.tryGenerate(
+      {
+        workspaceId,
+        intent,
+        blast,
+        counts,
+        realFiles,
+        linkedIssue,
+        specDocs,
+        findings,
+      },
+      onLog,
+    );
 
-    const existing = await this.repo.getBrief(prId);
-    // Fallback persistence (AC-8): a degraded brief is stored ONLY when there
-    // isn't already a good one — never clobber a prior good generation.
-    if (!shouldPersistBrief(brief.degraded, existing !== null)) return existing!;
+    if (!brief.degraded) {
+      // Non-degraded generation ALWAYS overwrites (AC-6: an explicit
+      // Regenerate always wins).
+      const persisted: Brief = { ...brief.value, generated_at: new Date().toISOString() };
+      await this.repo.upsertBrief(prId, persisted);
+      return persisted;
+    }
 
+    // Degraded generation: no-clobber is ATOMIC at the repository
+    // (`insertBriefIfAbsent` = INSERT … ON CONFLICT DO NOTHING) — no
+    // read-then-write window for a concurrent request to race.
     const persisted: Brief = { ...brief.value, generated_at: new Date().toISOString() };
-    await this.repo.upsertBrief(prId, persisted);
-    return persisted;
+    const wrote = await this.repo.insertBriefIfAbsent(prId, persisted);
+    if (wrote) return persisted;
+
+    // A good brief already existed — kept it, degraded generation discarded.
+    onLog?.('brief: regenerate degraded — kept existing good brief');
+    const existing = await this.repo.getBrief(prId);
+    // existing must be non-null here: insertBriefIfAbsent only returns false
+    // on a conflict, which means a row is already present.
+    return existing!;
   }
 
   /** Exactly one model call, with a deterministic-brief fallback on ANY throw,
    *  no key, or an empty/unusable completion. Never lets the LLM call fail the
    *  request — the caller decides whether to persist the fallback. */
-  private async tryGenerate(input: {
-    workspaceId: string;
-    intent: Awaited<ReturnType<Container['reviewRepo']['getIntent']>>;
-    blast: Awaited<ReturnType<Container['blast']['blastMapForPr']>>;
-    counts: ReturnType<typeof smartDiffCounts>;
-    realFiles: Set<string>;
-    linkedIssue: Awaited<ReturnType<typeof loadLinkedIssue>>;
-    specDocs: Awaited<ReturnType<typeof loadSpecDocs>>;
-    findings: FindingInput[];
-  }): Promise<{ value: Brief; degraded: boolean }> {
+  private async tryGenerate(
+    input: {
+      workspaceId: string;
+      intent: Awaited<ReturnType<Container['reviewRepo']['getIntent']>>;
+      blast: Awaited<ReturnType<Container['blast']['blastMapForPr']>>;
+      counts: ReturnType<typeof smartDiffCounts>;
+      realFiles: Set<string>;
+      linkedIssue: Awaited<ReturnType<typeof loadLinkedIssue>>;
+      specDocs: Awaited<ReturnType<typeof loadSpecDocs>>;
+      findings: FindingInput[];
+    },
+    onLog?: (msg: string) => void,
+  ): Promise<{ value: Brief; degraded: boolean }> {
     const fallback = deterministicBrief(input.intent, input.blast);
     try {
       const choice = await resolveFeatureModel(this.container, input.workspaceId, 'risk_brief');
@@ -131,13 +155,17 @@ export class BriefService {
       const value: Brief = {
         what: grounded.what,
         why: grounded.why,
-        risk_level: deterministicRiskLevel(input.blast),
+        risk_level: grounded.risk_level,
         risks: grounded.risks,
         review_focus: grounded.review_focus,
       };
       return { value, degraded: false };
-    } catch {
+    } catch (err) {
       // No key / provider error / empty completion → deterministic fallback.
+      // Log (fail-soft, no throw) so a real provider outage is distinguishable
+      // from a missing key instead of silently degrading — mirrors
+      // IntentService.ensureIntent's fail-soft catch. Never logs secrets.
+      onLog?.(`brief: generation degraded — ${(err as Error).message}`);
       return { value: fallback, degraded: true };
     }
   }

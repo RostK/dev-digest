@@ -38,6 +38,11 @@ function fakeBlast(map: BlastRadius): BlastService {
 const MODEL_FIXTURE = {
   what: 'Adds rate limiting to the public API.',
   why: 'Prevents abuse of public endpoints.',
+  // Deliberately chosen to DIFFER from what deterministicRiskLevel(FULL_MAP)
+  // would compute (FULL_MAP has 1 caller / 1 endpoint → 'medium' by the
+  // deterministic thresholds) — proves risk_level is MODEL-sourced, not
+  // blast-derived, on the happy path (AC-9).
+  risk_level: 'high',
   risks: [
     {
       kind: 'perf',
@@ -124,6 +129,9 @@ d('Brief module (DB-backed)', () => {
     expect(postRes.statusCode).toBe(200);
     const { brief } = postRes.json() as { brief: Brief };
     expect(brief.what).toBe(MODEL_FIXTURE.what);
+    // AC-9: risk_level is the MODEL's value, not deterministicRiskLevel(FULL_MAP)
+    // (which would compute 'medium' for this blast — see MODEL_FIXTURE comment).
+    expect(brief.risk_level).toBe('high');
     // Grounding drop (AC-3): the invented file_ref / review_focus path is gone.
     expect(brief.risks[0]!.file_refs).toEqual(['src/lib/rate.ts']);
     expect(brief.review_focus).toEqual([
@@ -166,7 +174,7 @@ d('Brief module (DB-backed)', () => {
     await app.close();
   });
 
-  it('falls back to the deterministic brief on a throwing model and does NOT clobber a prior good brief (AC-8)', async () => {
+  it('falls back to the deterministic brief on a throwing model and does NOT clobber a prior good brief (AC-8, #6/#7 atomic no-clobber)', async () => {
     const goodLlm = new MockLLMProvider('openai', { structuredBySchema: { BriefProposal: MODEL_FIXTURE } });
     const { app, prId } = await setup({ name: 'demo-fallback', llm: goodLlm });
 
@@ -174,8 +182,10 @@ d('Brief module (DB-backed)', () => {
     const goodBrief = (first.json() as { brief: Brief }).brief;
     expect(goodBrief.what).toBe(MODEL_FIXTURE.what);
 
-    // Swap in a throwing LLM and regenerate — the fallback must NOT overwrite
-    // the good brief already persisted above.
+    // Swap in a throwing LLM and regenerate — the degraded generation must
+    // NOT overwrite the good brief already persisted above. Persistence now
+    // goes through `insertBriefIfAbsent` (INSERT … ON CONFLICT DO NOTHING),
+    // which is atomic at the DB — no read-then-write window to race (#7).
     const throwingLlm = {
       complete: async () => {
         throw new Error('no key');
@@ -192,8 +202,10 @@ d('Brief module (DB-backed)', () => {
     const second = await app2.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
     expect(second.statusCode).toBe(200);
     const fallbackReturn = (second.json() as { brief: Brief }).brief;
-    // No-clobber: returns the EXISTING good brief, not a degraded one.
+    // No-clobber: returns the EXISTING good brief, not a degraded one — the
+    // degraded generation's own risk_level (deterministic) never surfaces.
     expect(fallbackReturn.what).toBe(MODEL_FIXTURE.what);
+    expect(fallbackReturn.risk_level).toBe('high');
 
     const cached = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
     expect((cached.json() as Brief).what).toBe(MODEL_FIXTURE.what);

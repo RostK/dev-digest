@@ -19,10 +19,27 @@ export class BriefRepository {
     return (row?.json as Brief | undefined) ?? null;
   }
 
+  /** Always overwrite (AC-6: an explicit Regenerate always wins) — the good-brief path. */
   async upsertBrief(prId: string, brief: Brief): Promise<void> {
     await this.db
       .insert(t.prBrief)
       .values({ prId, json: brief })
       .onConflictDoUpdate({ target: t.prBrief.prId, set: { json: brief } });
+  }
+
+  /**
+   * Insert ONLY if no row exists yet for this PR — the degraded-generation
+   * path (AC-8). `ON CONFLICT DO NOTHING … RETURNING` makes the no-clobber
+   * check ATOMIC at the database: a concurrent POST can no longer race a
+   * read-then-write window (fixes the prior read-`existing`-then-conditionally-
+   * upsert TOCTOU in the service). Returns whether a row was actually written.
+   */
+  async insertBriefIfAbsent(prId: string, brief: Brief): Promise<boolean> {
+    const rows = await this.db
+      .insert(t.prBrief)
+      .values({ prId, json: brief })
+      .onConflictDoNothing({ target: t.prBrief.prId })
+      .returning({ prId: t.prBrief.prId });
+    return rows.length > 0;
   }
 }

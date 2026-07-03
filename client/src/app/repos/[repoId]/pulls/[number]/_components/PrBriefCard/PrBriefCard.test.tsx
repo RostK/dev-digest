@@ -203,4 +203,43 @@ describe("PrBriefCard", () => {
     const link = screen.getByText("src/lib/rate.ts:42").closest("a");
     expect(link).toHaveAccessibleName("src/lib/rate.ts:42");
   });
+
+  it("shows an explicit error state when the brief query itself fails, with NO Generate button (review fix #5)", () => {
+    setBriefHook({ data: undefined, isPending: false, isError: true });
+    setGenerateHook();
+    setReviewHooks();
+    renderCard();
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Couldn't load the brief. This PR may be unreachable, or something went wrong on our end.",
+    );
+    // A failed read gives no signal a generate would succeed — never offer it.
+    expect(screen.queryByRole("button", { name: /generate brief/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Brief not generated yet.")).not.toBeInTheDocument();
+  });
+
+  it("shows an inline error near the button when generate/regenerate mutation fails (review fix #5)", () => {
+    setBriefHook({ data: null, isPending: false });
+    const mutate = setGenerateHook(vi.fn(), { isError: true });
+    setReviewHooks();
+    renderCard();
+
+    // Empty state: Generate button stays usable for retry, error shown alongside.
+    expect(screen.getByRole("button", { name: /generate brief/i })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Generating the brief failed. Please try again.");
+    fireEvent.click(screen.getByRole("button", { name: /generate brief/i }));
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an inline error near Regenerate when a regenerate mutation fails on an existing brief (review fix #5)", () => {
+    setBriefHook({ data: BRIEF, isPending: false });
+    setGenerateHook(vi.fn(), { isError: true });
+    setReviewHooks([REVIEW], [RUN]);
+    renderCard();
+
+    expect(screen.getByRole("button", { name: /regenerate/i })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Generating the brief failed. Please try again.");
+    // The brief body itself still renders — a failed regenerate doesn't blank the existing brief.
+    expect(screen.getByText("Adds rate limiting to the public API.")).toBeInTheDocument();
+  });
 });

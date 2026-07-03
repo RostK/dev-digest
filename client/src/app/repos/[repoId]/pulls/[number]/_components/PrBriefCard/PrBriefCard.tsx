@@ -1,9 +1,13 @@
 /* PrBriefCard — PR Why+Risk Brief (SPEC-04). Top row is composed live from the
    PR's review data (verdict/score/cost/findings), NOT from the Brief — a review
-   can exist without a brief and vice versa. The body is a pure read of
-   useBrief: null shows an explicit Generate button (no auto-fire, AC-7); a
-   present brief renders what/why, a color+label risk level (AC-9), risks, and
-   review-focus rows linking out to GitHub (AC-12), plus Regenerate (AC-6). */
+   can exist without a brief and vice versa. The body has three states off the
+   brief query: loading (isPending), ERROR (isError — the query itself failed,
+   e.g. 404/500; never offers Generate in that case, REVIEW FIX #5), and loaded
+   (null shows an explicit Generate button, no auto-fire, AC-7; a present brief
+   renders what/why, a color+label risk level (AC-9), risks, and review-focus
+   rows linking out to GitHub (AC-12), plus Regenerate (AC-6)). A failed
+   generate/regenerate mutation surfaces an inline error near the button
+   instead of failing silently (REVIEW FIX #5). */
 "use client";
 
 import React from "react";
@@ -27,7 +31,7 @@ interface PrBriefCardProps {
 
 export function PrBriefCard({ prId, repoFullName, headSha }: PrBriefCardProps) {
   const t = useTranslations("brief");
-  const { data: brief, isPending } = useBrief(prId);
+  const { data: brief, isPending, isError: briefIsError } = useBrief(prId);
   const generate = useGenerateBrief(prId);
 
   const { data: reviews } = usePrReviews(prId);
@@ -58,14 +62,40 @@ export function PrBriefCard({ prId, repoFullName, headSha }: PrBriefCardProps) {
       <div style={s.scroll}>
         <TopRow reviews={reviews} runs={runs} t={t} />
 
-        {!isPending && brief == null && (
-          <EmptyBody generate={() => generate.mutate()} pending={generate.isPending} t={t} />
+        {!isPending && briefIsError && <ErrorBody t={t} />}
+
+        {!isPending && !briefIsError && brief == null && (
+          <EmptyBody
+            generate={() => generate.mutate()}
+            pending={generate.isPending}
+            generateIsError={generate.isError}
+            t={t}
+          />
         )}
 
-        {brief != null && (
-          <BriefBody brief={brief} repoFullName={repoFullName} headSha={headSha} t={t} />
+        {!briefIsError && brief != null && (
+          <BriefBody
+            brief={brief}
+            repoFullName={repoFullName}
+            headSha={headSha}
+            generateIsError={generate.isError}
+            t={t}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+/** The brief QUERY itself failed (e.g. 404 cross-workspace, 500) — an explicit
+ *  error state, distinct from "no brief yet". Never offers Generate here: a
+ *  broken read gives no signal the write would succeed. */
+function ErrorBody({ t }: { t: T }) {
+  return (
+    <div style={s.emptyWrap}>
+      <p style={{ ...s.emptyHint, color: "var(--crit)" }} role="alert">
+        {t("loadError")}
+      </p>
     </div>
   );
 }
@@ -113,10 +143,12 @@ function TopRow({
 function EmptyBody({
   generate,
   pending,
+  generateIsError,
   t,
 }: {
   generate: () => void;
   pending: boolean;
+  generateIsError: boolean;
   t: T;
 }) {
   return (
@@ -126,6 +158,11 @@ function EmptyBody({
       <Button kind="primary" size="sm" icon="Sparkles" loading={pending} disabled={pending} onClick={generate}>
         {t("generate")}
       </Button>
+      {generateIsError && (
+        <p style={{ ...s.emptyHint, color: "var(--crit)" }} role="alert">
+          {t("generateError")}
+        </p>
+      )}
     </div>
   );
 }
@@ -134,11 +171,13 @@ function BriefBody({
   brief,
   repoFullName,
   headSha,
+  generateIsError,
   t,
 }: {
   brief: Brief;
   repoFullName?: string | null;
   headSha?: string | null;
+  generateIsError: boolean;
   t: T;
 }) {
   const canLink = !!(repoFullName && headSha);
@@ -147,6 +186,12 @@ function BriefBody({
 
   return (
     <>
+      {generateIsError && (
+        <p style={{ ...s.emptyHint, color: "var(--crit)", margin: 0 }} role="alert">
+          {t("generateError")}
+        </p>
+      )}
+
       <div>
         <div style={s.sectionHeading}>{t("what")}</div>
         <p style={s.what}>{brief.what}</p>

@@ -27,5 +27,7 @@
   "generating": "Generating…",
   "empty": "Brief not generated yet.",
   "emptyHint": "Generate a Why+Risk brief to summarize this PR's intent and flag review-worthy risk areas.",
-  "generatedAt": "Generated {relative}"
+  "generatedAt": "Generated {relative}",
+  "loadError": "Couldn't load the brief. This PR may be unreachable, or something went wrong on our end.",
+  "generateError": "Generating the brief failed. Please try again."
 }
