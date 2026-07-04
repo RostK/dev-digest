@@ -60,5 +60,5 @@ answers folded into the plan **directly** (no planner re-invocation) → plan pe
    the top tier. (Implementer tier is `implement`'s call — noted for that phase's retro.)
 
 ## Trend (vs prior retro)
-- First retro in `.claude/retros/` — no prior run to trend against. This establishes the baseline:
+- First retro in `docs/retros/` — no prior run to trend against. This establishes the baseline:
   **PLAN phase of a large cross-module spec ≈ 1 agent · ~150k tokens · ~12 min · 0 rework.**
