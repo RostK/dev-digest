@@ -70,6 +70,9 @@ export const RunStats = z.object({
   cost_usd: z.number().nullish(),
   findings: z.number().int(),
   grounding: z.string(),
+  /** Tokens attributed to the specs prompt slot (per-slot token attribution);
+      null when absent, mirroring the other optional per-slot stats. */
+  specs_tokens: z.number().int().nullish(),
 });
 export type RunStats = z.infer<typeof RunStats>;
 

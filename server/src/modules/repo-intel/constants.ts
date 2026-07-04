@@ -25,6 +25,13 @@ export const EXCLUDED_DIRS = [
   '.git',
 ] as const;
 
+/**
+ * [SPEC-02 T3] Directory names that mark a context-doc root. A `.md` file is a
+ * discoverable context doc iff one of its ancestor directories has one of
+ * these names (checked case-sensitively, same convention as EXCLUDED_DIRS).
+ */
+export const DOC_ROOT_DIRS = ['specs', 'docs', 'insights'] as const;
+
 // --- Read-time limits -------------------------------------------------------
 /** [T1] Caller fan-out cap per changed symbol (ORDER BY rank DESC LIMIT N). */
 export const MAX_CALLERS_PER_SYMBOL = 20;

@@ -1,4 +1,13 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, primaryKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  boolean,
+  jsonb,
+  primaryKey,
+  index,
+} from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces, users } from './core';
 import { skills } from './skills';
@@ -64,4 +73,23 @@ export const agentSkills = pgTable(
     enabled: boolean('enabled').notNull().default(true),
   },
   (t) => ({ pk: primaryKey({ columns: [t.agentId, t.skillId] }) }),
+);
+
+// Project-context documents attached to an agent (repo-relative file paths,
+// e.g. README.md, docs/*.md) that get injected into the review prompt in
+// `order`. No per-doc `enabled` column — AC-4 forbids per-doc enable in v1;
+// detach the row to remove a doc from the set.
+export const agentContextDocs = pgTable(
+  'agent_context_docs',
+  {
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => agents.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    order: integer('order').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.agentId, t.path] }),
+    agentIdx: index('agent_context_docs_agent_idx').on(t.agentId),
+  }),
 );

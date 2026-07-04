@@ -1,6 +1,20 @@
 /** Pure helpers for the DiffViewer. */
 import { HUNK_HEADER_RE } from "./constants";
 
+/** Stable DOM id for a file's card, so a deep-link (?tab=diff&file=…) can scroll
+ *  to it. Paths are used verbatim (getElementById accepts any non-space string,
+ *  and diff paths carry none). */
+export function fileAnchorId(path: string): string {
+  return `diff-file-${path}`;
+}
+
+/** `scroll-margin-top` for scroll-into-view targets in the diff (file cards,
+ *  finding lines). The PR detail header is `position: sticky; top: 0`, so a bare
+ *  scrollIntoView aligns the target to y=0 UNDER it. PrDetailHeader publishes its
+ *  live height as `--pr-detail-header-h`; we clear that plus a small gap so the
+ *  target lands just below the sticky panel instead of behind it. */
+export const DIFF_SCROLL_MARGIN_TOP = "calc(var(--pr-detail-header-h, 140px) + 12px)";
+
 export interface Line {
   kind: "add" | "del" | "ctx" | "hunk";
   text: string;

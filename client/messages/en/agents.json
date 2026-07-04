@@ -46,6 +46,7 @@
     "tabs": {
       "config": "Config",
       "skills": "Skills",
+      "context": "Context",
       "evals": "Evals",
       "stats": "Stats",
       "ci": "CI"
@@ -100,6 +101,16 @@
       "convention": "convention",
       "security": "security",
       "custom": "custom"
+    }
+  },
+  "context": {
+    "title": "Project context",
+    "orderHint": "Order matters — earlier documents appear earlier in the assembled prompt. Drag to reorder; toggle to attach to this agent.",
+    "emptyTitle": "No project context documents discovered",
+    "emptyBody": "Add markdown under a specs/, docs/, or insights/ folder anywhere in the active repo and it will show up here.",
+    "noRepo": {
+      "title": "No repo selected",
+      "body": "Add or select a repo to browse and attach its project context documents."
     }
   },
   "mount": {

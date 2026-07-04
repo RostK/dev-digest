@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
- * Smart Diff. Composed into PrBrief.
+ * Smart Diff. Composed into Brief.
  */
 
 // ---- Intent ----
@@ -114,11 +114,28 @@ export const SmartDiff = z.object({
 });
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
-// ---- Composed PR Brief (pr_brief.json) ----
-export const PrBrief = z.object({
-  intent: Intent,
-  blast: BlastRadius,
-  risks: Risks,
-  history: PrHistory,
+// ---- Review focus (Why+Risk Brief) ----
+export const ReviewFocus = z.object({
+  path: z.string(),
+  line: z.number().int(),
+  reason: z.string(),
 });
-export type PrBrief = z.infer<typeof PrBrief>;
+export type ReviewFocus = z.infer<typeof ReviewFocus>;
+
+// ---- Composed PR Why+Risk Brief ----
+export const Brief = z.object({
+  what: z.string(),
+  why: z.string(),
+  risk_level: RiskSeverity,
+  risks: z.array(Risk),
+  review_focus: z.array(ReviewFocus),
+  generated_at: z.string().optional(),
+  // The PR head SHA this brief was generated against. Stamped by the service at
+  // persist time (like generated_at, inside the json blob — pr_brief has no
+  // column for it). The read boundary treats a brief whose head_sha no longer
+  // matches the PR's current head as STALE and hides it (returns null), so a new
+  // commit no longer serves an out-of-date brief. Optional for legacy blobs
+  // written before this field existed (their staleness is unknowable → shown).
+  head_sha: z.string().optional(),
+});
+export type Brief = z.infer<typeof Brief>;

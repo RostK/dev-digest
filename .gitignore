@@ -26,3 +26,8 @@ test-results/
 
 # pr-self-review local verdict cache (per-machine, not shared)
 .claude/.pr-self-review-state.json
+
+# pnpm per-package native-build-script approvals (per-machine, local; this repo
+# is NOT a pnpm workspace — see CLAUDE.md. pnpm regenerates these on install.)
+client/pnpm-workspace.yaml
+server/pnpm-workspace.yaml

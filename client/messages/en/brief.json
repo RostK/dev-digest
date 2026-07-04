@@ -1,19 +1,33 @@
 {
-  "block": {
-    "intent": "Intent",
-    "blast": "Blast radius",
-    "risks": "Risks",
-    "history": "PR history"
+  "title": "Why + Risk Brief",
+  "what": "What",
+  "why": "Why",
+  "riskLevel": "Risk level",
+  "risk": {
+    "high": "High risk",
+    "medium": "Medium risk",
+    "low": "Low risk"
   },
+  "reviewFocus": "Review focus",
+  "risks": "Risk areas",
   "noRisks": "No notable risks flagged.",
-  "noHistory": "No prior PRs overlap these files.",
-  "overlap": "{count} overlap",
-  "unavailable": "Brief not available yet.",
-  "unavailableHint": "Run a review or open the PR to compute it.",
-  "why": {
-    "title": "git-why",
-    "blame": "blame",
-    "noHistory": "No history available for this line.",
-    "noCommits": "No commits found for this line."
-  }
+  "noFocus": "No specific review focus flagged.",
+  "verdict": {
+    "request_changes": "Changes requested",
+    "approve": "Approved",
+    "comment": "Comment"
+  },
+  "score": "Score {value}",
+  "cost": "${value}",
+  "costUnknown": "—",
+  "findings": "{count, plural, one {# finding} other {# findings}}",
+  "noReview": "No review yet",
+  "generate": "Generate brief",
+  "regenerate": "Regenerate",
+  "generating": "Generating…",
+  "empty": "Brief not generated yet.",
+  "emptyHint": "Generate a Why+Risk brief to summarize this PR's intent and flag review-worthy risk areas.",
+  "generatedAt": "Generated {relative}",
+  "loadError": "Couldn't load the brief. This PR may be unreachable, or something went wrong on our end.",
+  "generateError": "Generating the brief failed. Please try again."
 }

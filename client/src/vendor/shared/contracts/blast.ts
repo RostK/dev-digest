@@ -5,7 +5,7 @@ import { BlastRadius } from './brief.js';
  * Blast Radius HTTP response: the BlastRadius map plus the transport-level
  * degraded signal from the repo-intel facade.
  *
- * BlastRadius itself stays pure (it is also the PrBrief / LLM-output type), so
+ * BlastRadius itself stays pure (it is also the Brief / LLM-output type), so
  * the degraded state rides alongside it here. This lets the Blast tab render a
  * "partial index" badge from the blast query's OWN result rather than guessing
  * from the repo-wide index state.

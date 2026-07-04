@@ -120,6 +120,13 @@
       "when": 1782116859609,
       "tag": "0016_organic_tempest",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1782992541063,
+      "tag": "0017_mature_warlock",
+      "breakpoints": true
     }
   ]
 }

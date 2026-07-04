@@ -4,6 +4,7 @@ import React from "react";
 import { SectionLabel } from "@devdigest/ui";
 import { IntentCard } from "../IntentCard";
 import { BlastTab } from "../BlastTab";
+import { PrBriefCard } from "../PrBriefCard";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -17,6 +18,8 @@ interface OverviewTabProps {
 export function OverviewTab({ prBody, prId, repoFullName, headSha }: OverviewTabProps) {
   return (
     <>
+      <PrBriefCard prId={prId} />
+
       {/* Intent (left) + Blast radius (right), mirroring the PR-brief design. */}
       <div style={s.brief}>
         <IntentCard prId={prId} />

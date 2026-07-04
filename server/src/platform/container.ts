@@ -28,6 +28,7 @@ import { SkillsRepository } from '../modules/skills/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
+import { BlastService } from '../modules/blast/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
 
@@ -52,6 +53,8 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /** blast facade — tests inject a mock BlastService (e.g. for the PR Brief). */
+  blast?: BlastService;
 }
 
 export class Container {
@@ -78,6 +81,7 @@ export class Container {
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
+  private _blast?: BlastService;
 
   constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
     this.config = config;
@@ -121,6 +125,18 @@ export class Container {
     if (this.overrides.repoIntel) return this.overrides.repoIntel;
     this._repoIntel ??= new RepoIntelService(this);
     return this._repoIntel;
+  }
+
+  /**
+   * The blast-radius facade (SPEC-04 T3). Lets a sibling module read a PR's
+   * blast map (`blastMapForPr`) with ZERO LLM calls, alongside the full
+   * `blastForPr`/`blastForFiles` used by the blast module's own routes.
+   * Tests inject a mock via `ContainerOverrides.blast`.
+   */
+  get blast(): BlastService {
+    if (this.overrides.blast) return this.overrides.blast;
+    this._blast ??= new BlastService(this);
+    return this._blast;
   }
 
   /** Import-graph builder (dependency-cruiser). T3 indexer pipeline only. */

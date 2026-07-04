@@ -1,4 +1,13 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, primaryKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  boolean,
+  jsonb,
+  primaryKey,
+  index,
+} from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 
@@ -31,4 +40,22 @@ export const skillVersions = pgTable(
     createdAt: now(),
   },
   (t) => ({ pk: primaryKey({ columns: [t.skillId, t.version] }) }),
+);
+
+// Project-context documents attached to a skill (repo-relative file paths)
+// that get injected into the review prompt in `order`. No per-doc `enabled`
+// column — AC-4 forbids per-doc enable in v1; detach the row to remove a doc.
+export const skillContextDocs = pgTable(
+  'skill_context_docs',
+  {
+    skillId: uuid('skill_id')
+      .notNull()
+      .references(() => skills.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    order: integer('order').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.skillId, t.path] }),
+    skillIdx: index('skill_context_docs_skill_idx').on(t.skillId),
+  }),
 );

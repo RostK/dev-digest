@@ -1,5 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type {
+  ContextAttachment,
   Skill,
   SkillImportPreview,
   SkillSource,
@@ -102,6 +103,32 @@ export class SkillsService {
     if (!skill) return undefined;
     const rows = await this.repo.listVersions(skillId);
     return rows.map(toSkillVersionDto);
+  }
+
+  /**
+   * Own context docs attached to a skill, ordered (AC-6). Workspace-scoped:
+   * returns undefined when the skill isn't in this workspace (route → 404).
+   */
+  async contextDocs(workspaceId: string, skillId: string): Promise<ContextAttachment[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.repo.contextDocsForSkill(skillId);
+  }
+
+  /**
+   * Replace the skill's context docs — ordered paths ONLY, never text (AC-8).
+   * Workspace-scoped: returns undefined when the skill isn't in this workspace
+   * (route → 404).
+   */
+  async setContextDocs(
+    workspaceId: string,
+    skillId: string,
+    paths: string[],
+  ): Promise<ContextAttachment[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    await this.repo.setContextDocs(skillId, paths);
+    return this.repo.contextDocsForSkill(skillId);
   }
 
   /**

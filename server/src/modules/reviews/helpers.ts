@@ -2,6 +2,7 @@
  * Pure helpers for the review service (side-effect free; operate purely on
  * their arguments — no DB / network / `this`).
  */
+import { resolve, sep } from 'node:path';
 import type { Finding } from '@devdigest/shared';
 import type { FindingRow, PullRow, ReviewRow } from './repository.js';
 
@@ -71,6 +72,32 @@ export function reviewToDto(
     created_at: review.createdAt.toISOString(),
     findings: findings.map(findingRowToDto),
   };
+}
+
+/**
+ * Path-traversal guard for reading a Project Context doc (T6) from a repo's
+ * clone: rejects `..` segments, absolute paths, drive letters, URLs, and any
+ * non-`.md` extension — context docs are markdown-only, matching T3's
+ * `docs-walk` discovery (`**\/{specs,docs,insights}/**\/*.md`) and what T5's
+ * agent/skill context-doc tables can ever contain. THEN verifies the resolved
+ * path stays inside `clonePath` — defense-in-depth beyond the syntactic
+ * check (e.g. a segment trick the string checks alone might miss).
+ *
+ * `intent-service.ts` keeps its OWN, narrower-scoped `isSafeRepoPath` (it
+ * allows a broader extension set — md/mdx/txt/rst — for PR-body-referenced
+ * spec/plan docs, and has no resolved-path check); kept separate rather than
+ * shared to avoid changing that path's behavior for this task unit.
+ */
+export function isSafeRepoPath(clonePath: string, relPath: string): boolean {
+  if (!relPath) return false;
+  if (relPath.startsWith('/') || relPath.startsWith('\\')) return false;
+  if (/^[a-zA-Z]:/.test(relPath) || /^[a-z]+:\/\//i.test(relPath)) return false; // drive letter / URL
+  if (relPath.split(/[\\/]/).some((seg) => seg === '..')) return false;
+  if (!relPath.toLowerCase().endsWith('.md')) return false;
+
+  const root = resolve(clonePath);
+  const resolved = resolve(root, relPath);
+  return resolved === root || resolved.startsWith(root + sep);
 }
 
 /**

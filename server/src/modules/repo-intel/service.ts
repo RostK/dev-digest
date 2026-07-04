@@ -33,6 +33,7 @@ import type {
   BlastCallerRow,
   BlastChangedSymbol,
   BlastResult,
+  DiscoveredDoc,
   FileRankRow,
   IndexResult,
   IndexState,
@@ -54,6 +55,7 @@ import {
 } from './constants.js';
 import { runFullIndex, type IndexPayload } from './pipeline/full.js';
 import { runIncremental } from './pipeline/incremental.js';
+import { walkContextDocs } from './pipeline/docs-walk.js';
 
 /**
  * GLOBALS allowlist — common JS/TS builtins + runtime that appear as bare
@@ -629,6 +631,19 @@ export class RepoIntelService implements RepoIntel {
   /** Top-N files by rank, minus tests/configs/migrations — conventions sample. */
   async getConventionSamples(repoId: string, n: number): Promise<string[]> {
     return this.getTopFilesByRank(repoId, n);
+  }
+
+  /**
+   * SPEC-02 T3 — discover markdown context docs (specs/docs/insights) in the
+   * repo's clone. Thin facade: resolves the clone path via the same
+   * `getRepoBasics` lookup every other clone-reading method here already
+   * uses, then delegates to the pure `walkContextDocs`. Degraded gate:
+   * missing repo / not-yet-cloned repo -> `[]` (never throws).
+   */
+  async discoverContextDocs(repoId: string, roots?: string[]): Promise<DiscoveredDoc[]> {
+    const repo = await this.repo.getRepoBasics(repoId);
+    if (!repo || !repo.clonePath) return [];
+    return walkContextDocs(repo.clonePath, roots);
   }
 
   /**

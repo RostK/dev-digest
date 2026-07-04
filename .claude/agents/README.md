@@ -8,26 +8,27 @@ settings) followed by a system-prompt body. Claude delegates to an agent based o
 | Agent | Role | Writes? | Model | Key frontmatter |
 |-------|------|---------|-------|-----------------|
 | [`researcher`](researcher.md) | Read-only investigator (project + internet) returning a cited, structured report | No | sonnet | `tools: Read, Glob, Grep, Bash, WebSearch, WebFetch` |
-| [`planner`](planner.md) | Authors a structured, project-aware Development Plan with parallel-safe task units | No | opus | `permissionMode: plan`, read-only tools + `Skill` |
+| [`implementation-planner`](implementation-planner.md) | Turns existing requirements into an Implementation Plan — verifies requirements, recommends improvements, asks multi- vs single-agent — with parallel-safe task units | No | opus | `permissionMode: plan`, read-only tools + `Skill` + `AskUserQuestion` |
 | [`implementer-backend`](implementer-backend.md) | Executes ONE backend task unit (`server/**` or `reviewer-core/**`); runs many-in-parallel | Yes | sonnet | `isolation: worktree`, `permissionMode: acceptEdits`, `skills:` backend set, `+Write, Edit, Skill` |
 | [`implementer-ui`](implementer-ui.md) | Executes ONE UI task unit (`client/**`); runs many-in-parallel | Yes | sonnet | `isolation: worktree`, `permissionMode: acceptEdits`, `skills:` ui set, `+Write, Edit, Skill` |
 | [`test-writer-backend`](test-writer-backend.md) | Writes backend tests (`server/**`, `reviewer-core/**`); TDD-first or backfill; red→green | Yes (tests) | sonnet | `isolation: worktree`, `permissionMode: acceptEdits`, `skills:` backend-test set |
 | [`test-writer-ui`](test-writer-ui.md) | Writes UI tests (`client/**`, RTL/jsdom); TDD-first or backfill; red→green | Yes (tests) | sonnet | `isolation: worktree`, `permissionMode: acceptEdits`, `skills:` ui-test set |
-| [`architecture-reviewer`](architecture-reviewer.md) | Read-only architecture review (onion + feature-based); Violation/Smell/Nit, cited | No | opus | read-only tools + `Skill`, `skills:` architecture set |
-| [`plan-verifier`](plan-verifier.md) | Read-only requirements-coverage check of code vs a plan (traceability, not quality) | No | opus | read-only tools + `Skill`, `skills:` light |
+| [`architecture-reviewer`](architecture-reviewer.md) | Read-only architecture review (onion + feature-based); Violation/Smell/Nit, cited | No | sonnet | read-only tools + `Skill`, `skills:` architecture set |
+| [`plan-verifier`](plan-verifier.md) | Read-only requirements-coverage check of code vs a plan (traceability, not quality) | No | sonnet | read-only tools + `Skill`, `skills:` light |
 | [`doc-writer`](doc-writer.md) | Writes docs (Diátaxis + ADR + Mermaid) to the right repo location, grounded in code | Yes (docs) | sonnet | `permissionMode: acceptEdits`, `skills:` mermaid + architecture |
+| [`spec-author`](spec-author.md) | Autonomous SDD author — grounds, analyzes, drafts with `[NEEDS CLARIFICATION]` markers, writes `specs/**` + maintains `specs/INDEX.md`; runs standalone or driven by the `write-spec` loop | Yes (specs only) | opus | `permissionMode: acceptEdits`, write scope `specs/**`, `+mcp__devdigest__get_conventions/get_blast_radius` |
 
 ## Model choices
 
-- **`planner` → opus.** Planning is the highest-leverage step: its decomposition,
+- **`implementation-planner` → opus.** Planning is the highest-leverage step: its decomposition,
   file scoping, and skill/pitfall assignment compound across every downstream worker. Pay
   for reasoning quality once, here.
 - **`implementer-backend` / `implementer-ui` → sonnet.** They run many-in-parallel (so cost
-  multiplies), execute a well-scoped task the planner already reasoned through, and are
+  multiplies), execute a well-scoped task the implementation-planner already reasoned through, and are
   backstopped by a hard tests + typecheck gate. Sonnet keeps strong coding ability at
   predictable, low fan-out cost. Not haiku — they write real backend/UI code under
   architectural constraints, and a bad edit across parallel worktrees is costly to untangle.
-  If a task is too gnarly for sonnet, that's a signal for the planner to split it smaller,
+  If a task is too gnarly for sonnet, that's a signal for the implementation-planner to split it smaller,
   not to upgrade the worker.
 - **`researcher` → sonnet.** Synthesis, source-reliability grading, and the no-hallucinated-
   citations honesty rule are exactly where smaller models fail, and there's no downstream
@@ -38,32 +39,101 @@ settings) followed by a system-prompt body. Claude delegates to an agent based o
   well-scoped, and backstopped by their own red→green + typecheck gate. The split mirrors the
   implementers so each preloads only its track's test skills (`react-testing-library` for UI;
   Fastify/Drizzle/Vitest conventions for backend).
-- **`architecture-reviewer` / `plan-verifier` → opus.** Both are read-only judgments with **no
-  downstream gate** and a high cost of being wrong (a false "violation" or a confident-but-unmet
-  "verified"), and both are invoked one-at-a-time (no ×N pressure) — exactly the profile where
-  paying for reasoning quality and low false positives is worth it. Sonnet is an acceptable
-  downgrade if cost matters and the strict grounding rules in their prompts hold up.
+- **`architecture-reviewer` / `plan-verifier` → sonnet** (currently, for cost). Both are read-only
+  judgments with **no downstream gate** and a high cost of being wrong (a false "violation" or a
+  confident-but-unmet "verified"), and both run one-at-a-time (no ×N pressure) — the profile that
+  originally justified opus. They were **downgraded to sonnet to cut cost**, which the design always
+  allowed *"if cost matters and the strict grounding rules in their prompts hold up"*: both prompts
+  are heavily grounding-constrained (every finding / `MET` needs an exact `path:line`; a stub is
+  never `MET`; `NOT FOUND` must say where it searched), leaving little room to hallucinate a verdict.
+  **Revert to opus if you see false `VIOLATION`s or confident-but-unmet `MET`s** — `plan-verifier`
+  is the riskier of the two on sonnet, since it is the last acceptance gate.
 - **`doc-writer` → sonnet.** Grounded technical writing + diagram generation; not precision-
   critical reasoning, and a human reads the prose. Strong enough to mirror an API or turn a plan
   into a doc faithfully, at predictable cost.
+- **`spec-author` → opus.** Authoring requirements is upstream of everything: a vague or
+  contradictory acceptance criterion propagates into the plan, the code, and the tests with no
+  downstream gate to catch it. This agent now owns the full author job — grounding, design
+  analysis, normalizing intent into precise EARS statements, and ID/supersedes bookkeeping — so it
+  is exactly the reasoning-critical, one-at-a-time step (no ×N pressure) worth paying for. Sonnet
+  is an acceptable downgrade only if it is driven purely as a mechanical renderer of an already-
+  final brief.
 
 ## How they fit together
 
-`planner` → produces a Development Plan whose task units are tagged `backend|ui`, name
+Upstream of the plan sits the **spec**: the autonomous **`spec-author`** agent grounds on the repo,
+analyzes the design, drafts the spec leaving open decisions as `[NEEDS CLARIFICATION]` markers, and
+materializes it as `specs/<module>/SPEC-NN-YYYY-MM-DD-<slug>.md` registered in `specs/INDEX.md`. The
+**`write-spec`** skill (main thread) wraps it in a clarification loop — it surfaces those markers
+to the user **live** via `AskUserQuestion` and re-invokes the agent to resolve them (a subagent
+cannot ask the user itself). Run the agent alone for an unattended draft, or via the skill for the
+interactive close-out. The spec is the **WHAT**; `implementation-planner` consumes it and produces
+the **HOW**.
+
+`implementation-planner` → produces an Implementation Plan whose task units are tagged `backend|ui`, name
 the exact files and skills, quote relevant INSIGHTS pitfalls, and declare which units are
-parallel-safe (disjoint file sets). You then fan out one implementer per task unit —
+parallel-safe (disjoint file sets). The planner is read-only, so **the main thread persists the
+returned plan to `plans/PLAN-<SPEC-ID>-<slug>.md`** (HOW lives in `plans/`, never `specs/`) — a
+plan is usually executed in a separate chat and verified in a third, so it must survive as a
+durable artifact, not chat scrollback. You then fan out one implementer per task unit —
 `implementer-backend` for `backend` units, `implementer-ui` for `ui` units; each works in its
 own git worktree, applies its preloaded track skill set, makes the tests green, and
-self-reviews only its own diff.
+self-reviews only its own diff. Worktree output is **uncommitted in that worktree** — the
+orchestrator must integrate each worker's files back into the branch (and commit units that later
+units depend on) before the review phase.
 
-Around that core loop sit four more specialists: **`test-writer-backend` / `test-writer-ui`**
-author tests (TDD-first from the plan, or backfill for existing code) with the same red→green
-gate; **`architecture-reviewer`** and **`plan-verifier`** are read-only gates over the result —
-the first judges structural topology (onion/feature-based invariants), the second checks that
-every requirement in the plan was actually implemented (coverage, not quality); **`doc-writer`**
-turns the finished work (or a plan, or any input) into correctly-typed, correctly-placed
-documentation with Mermaid diagrams. `researcher` is the read-only fact-finder used to ground
-any step (project code or the web).
+Around that core loop sit the test and review specialists. **`test-writer-backend` /
+`test-writer-ui`** author tests (TDD-first from the plan's `AC`s — the preferred default — or
+backfill for existing code) with a red→green gate. Then **three read-only gates run in parallel**
+(fan them out in one message — they are independent):
+
+- **`plan-verifier`** — requirement coverage: was every `AC` actually built (evidence, not
+  quality). It reads the plan's `Verify:` hints, which point at **named tests** — so it must run
+  **after the tests exist**, never before, or it reports false `NOT FOUND`s.
+- **`architecture-reviewer`** — structural topology only (onion / feature-based invariants). It
+  does **NOT** hunt bugs.
+- **`/code-review`** — line-level correctness bugs (the gap `architecture-reviewer` deliberately
+  leaves). Use its `ultra` variant for a deep cloud pass.
+
+Their findings feed a **remediation loop**: route fixes back to `implementer-*`, then re-verify
+only the touched items. Finally **`pr-self-review`** gates the whole diff before push/PR.
+**`doc-writer`** turns the finished work (or a plan, or any input) into correctly-typed,
+correctly-placed documentation with Mermaid diagrams. `researcher` is the read-only fact-finder
+used to ground any step (project code or the web).
+
+**End-to-end pipeline** (the parenthesized read-only gates run in parallel):
+
+```
+write-spec → spec-author        ──►  APPROVED spec        (WHAT, in specs/)
+implementation-planner            ──►  plans/PLAN-*.md       (HOW, persisted by the main thread)
+  then, executing the plan:
+   1. test-writer-*    red tests from each AC              (TDD-first default)
+   2. implementer-*    multi-agent in worktrees → green
+                       → integrate worktree output back into the branch
+   3. ( plan-verifier ‖ architecture-reviewer ‖ /code-review )   ← parallel, read-only
+   4. fix loop:        findings → implementer-* → re-verify touched items
+   5. pr-self-review   whole diff → push / PR
+```
+
+Three main-thread **skills** drive this pipeline, one per phase — each wraps/drives its agent(s),
+keeps user Q&A + the phase gate in the main thread, and offers **`/review-run`** at the end:
+- **`/write-spec`** — the SPEC phase; wraps `spec-author`, runs the `[NEEDS CLARIFICATION]` loop.
+- **`/plan-implementation`** — the PLAN phase; wraps the read-only `implementation-planner`, relays
+  its clarifications via `AskUserQuestion`, fans out `researcher`s for its `[RESEARCH NEEDED]` gaps,
+  confirms the execution mode, and **persists the plan to `plans/PLAN-*.md`** (the planner can't write).
+- **`/implement`** — build → review → fix → gate from the persisted plan.
+
+Run spec and plan as their own deliberate, human-in-the-loop steps; `/implement` then automates the
+tail — fanning out the implementers, running the three review gates in parallel, driving the bounded
+post-review fix loop, and stopping at the pre-push gate. (A read-only agent can't prompt the user,
+fan out siblings, or write — so each phase's main-thread duties live in its wrapper skill, never in
+the agent; that is also why the `/review-run` nudge lives in the skills, not the agents.)
+
+**Current token-economy toggles** (see also `/implement`): the **`test-writer-*`** agents are
+**paused** — not invoked — so implementers green only existing/own tests and `plan-verifier` will
+report the missing test evidence as `UNVERIFIABLE`/`NOT FOUND` (expected); and
+**`architecture-reviewer` / `plan-verifier` run on `sonnet`** (see Model choices). Re-add a
+red-tests phase and/or revert those models when cost is less tight.
 
 ---
 
@@ -80,31 +150,48 @@ anything, and is the fact-finder the other agents lean on.
   `Grep`, read-only `Bash`) plus `WebSearch`/`WebFetch`; no `Write`/`Edit`.
 - **Structured output with mandatory citations** so findings are traceable, plus a
   **no-hallucinated-citations honesty rule** (say "not found" rather than guess).
-- It **predates** the planner/implementer work and follows the same conventions; its full
+- It **predates** the implementation-planner/implementer work and follows the same conventions; its full
   design is documented inline in `researcher.md`.
 
 **Sources:** none external — its design is self-contained in `researcher.md`.
 
-## `planner`
+## `implementation-planner`
 
-A read-only software architect. It runs a mandatory pre-step (root + module `CLAUDE.md`,
-module `INSIGHTS.md`, README, `git log`), knows the full module map (server modules,
-`reviewer-core`, client routes, dual-vendored `@devdigest/shared` contracts), and emits a
-Development Plan as a contract for the implementers. It **invokes** the same per-track skill
-set the matching implementer preloads *and* names those skills on each task unit — so the
+A read-only software architect. It takes **already-defined requirements** and produces the HOW
+— never the spec. It runs a mandatory pre-step (root + module `CLAUDE.md`, module
+`INSIGHTS.md`, README, `git log`), knows the full module map (server modules, `reviewer-core`,
+client routes, dual-vendored `@devdigest/shared` contracts), verifies the incoming requirements
+(clarifying questions + recommendations), confirms multi- vs single-agent execution with the
+user, and emits an Implementation Plan for the implementers. It **invokes** the same per-track
+skill set the matching implementer preloads *and* names those skills on each task unit — so the
 plan's structure is skill-grounded at plan time, not just at execution time.
 
 **Based on:**
 
 - **`description` as the sole delegation trigger** + supported frontmatter fields + tool
   scoping (allowlist) → read-only `tools` and `permissionMode: plan`, plus `Skill` (read-only:
-  it injects guidance, never writes) for full per-track parity with the implementers.
-- **Separation of planning from implementation** and a **spec-as-contract** (acceptance
-  criteria, contracts, invariants, file-level tasks, test plan) rather than a loose PRD.
+  it injects guidance, never writes) for full per-track parity with the implementers, and
+  `AskUserQuestion` so requirement clarifications and the multi-/single-agent choice are real
+  interactive prompts, not prose.
+- **Separation of spec from implementation planning** — it consumes requirements and produces
+  the HOW (file-level tasks, ordering, skills, pitfalls, test plan); it never authors the spec.
+- **Requirements verified at plan time** — it validates the incoming requirements, asks
+  clarifying questions, and recommends improvements before committing to a plan.
+- **User-chosen execution mode** — it confirms multi-agent (parallel implementers) vs a
+  single-agent pass and shapes the plan accordingly (parallelization graph vs ordered steps).
 - **Read-heavy planner, write-heavy implementer** division of responsibility.
-- **INSIGHTS read at plan time** and baked into task specs (context-engineering: inject only
-  load-bearing context), rather than every worker re-reading everything.
-- **Naming away from built-ins** (`plan`/`explore` can be shadowed) → `planner`.
+- **INSIGHTS read at plan time** for *only the touched modules* (never every INSIGHTS in the repo)
+  and baked into task specs (context-engineering: inject only load-bearing context), rather than
+  every worker re-reading everything.
+- **Traceability carried forward** — it reuses the spec's `AC-N` ids verbatim, each with its
+  `Verify:` hint, and carries the **non-functional** requirements into the plan so they shape
+  design (and `plan-verifier` can trace both forward).
+- **Research signalled, never guessed** — a read-only subagent can't spawn `researcher`, so an
+  info gap becomes a `[RESEARCH NEEDED: …]` item the main thread resolves by fanning out one or
+  more `researcher` agents in parallel (mirrors `spec-author`'s `[NEEDS CLARIFICATION]` handshake).
+- **A final self-check** gates the plan before it's emitted (every requirement → a unit, every
+  claim cited, unknowns flagged, parallel groups disjoint).
+- **Naming away from built-ins** (`plan`/`explore`/`Plan` can be shadowed) → `implementation-planner`.
 
 **Sources:** 1, 2, 5, 6, 10, 11 — see [Sources](#sources).
 
@@ -124,7 +211,7 @@ only the code it wrote.
   (full content, not just the description) into context at startup. Because one file can't
   preload *conditionally*, the agent is split into a backend and a UI variant so each loads
   only its track's set — guaranteed presence without the cross-track context cost (and noise)
-  of loading all eleven. The planner still invokes the same per-track set while planning.
+  of loading all eleven. The implementation-planner still invokes the same per-track set while planning.
 - **Worktree isolation for parallel workers** (`isolation: worktree`) so concurrent edits —
   and concurrent *whole-project* `typecheck`/`test` runs, which are not file-scoped — never
   collide, plus `permissionMode: acceptEdits` for non-interactive runs. See the worktree
@@ -132,7 +219,7 @@ only the code it wrote.
 - **File-ownership-up-front**: tasks with overlapping files must be sequenced, not
   parallelized — the worker stays strictly inside its assigned files.
 - **~3–5 concurrent workers** as the practical sweet spot before merge cost dominates.
-- **Hybrid INSIGHTS consumption**: planner bakes in the cross-cutting ones; the worker reads
+- **Hybrid INSIGHTS consumption**: implementation-planner bakes in the cross-cutting ones; the worker reads
   its own module's local file for freshness. The worker never *writes* INSIGHTS — it surfaces
   candidates in its summary and the parent routes them via `engineering-insights`.
 - **Self-review + test-gating loop** scoped to the worker's own diff (not a full PR audit).
@@ -158,7 +245,7 @@ those deps present. Notes:
   Developer Mode or an elevated shell.
 - **Fallback if worktree setup is undesirable:** drop `isolation: worktree` and rely on
   owned-paths alone — only safe when workers run sequentially, across *separate packages*, or
-  with the planner sequencing any units that share a `typecheck`/`test` scope (because those
+  with the implementation-planner sequencing any units that share a `typecheck`/`test` scope (because those
   gates compile the whole package, a sibling's in-flight edit would otherwise contaminate a
   worker's green/red signal).
 
@@ -204,7 +291,7 @@ like a fitness function and writes nothing.
 
 ## `plan-verifier`
 
-A read-only requirements verifier. Given a Development Plan + the written code, it checks whether
+A read-only requirements verifier. Given an Implementation Plan + the written code, it checks whether
 every requirement was actually implemented — **coverage and done-ness, not code quality**.
 
 **Based on:**
@@ -217,6 +304,12 @@ every requirement was actually implemented — **coverage and done-ness, not cod
   and `NOT FOUND` must say where it searched — directly countering the confident-but-wrong
   failure mode. Distinct from the architecture-reviewer and `/code-review` (it judges coverage,
   not quality).
+- **`Verify:`-hint-driven evidence** — each acceptance criterion's hint tells it the evidence
+  class to look for (a named `unit`/`*.it.test.ts`/`e2e` test vs. `manual`), and it verifies
+  **non-functional** criteria too (tenancy, i18n, secrets, perf), not just behavioral ones.
+- **Folder-scoped INSIGHTS + a final self-check** — it reads only the touched modules' INSIGHTS
+  to know their traps, and self-checks (every AC has a verdict, every `MET` cited, nothing
+  written) before returning; unresolvable externals are flagged for a `researcher` fan-out.
 
 **Sources:** 24, 25, 26, 27, 28, 29 — see [Sources](#sources).
 
@@ -240,13 +333,46 @@ the right repo location.
 
 **Sources:** 30, 31, 32, 33, 34, 35 — see [Sources](#sources).
 
+## `spec-author`
+
+The autonomous author of the **Spec-Driven Development** pair. It does the full job end-to-end:
+grounds on the repo (module `CLAUDE.md`/README/INSIGHTS, the `get_conventions` / `get_blast_radius`
+MCP tools, repo-intel), analyzes the design for gaps / corner cases / cross-module impact / UX,
+drafts `specs/TEMPLATE.md` into `specs/<module>/SPEC-NN-YYYY-MM-DD-<slug>.md`, appends the row to
+`specs/INDEX.md`, and applies `Supersedes` links. Because a subagent **cannot** ask the user, every
+decision it can't resolve becomes a `[NEEDS CLARIFICATION: NC-n]` marker returned for follow-up —
+it never guesses to look finished. It runs standalone (an unattended draft) or is driven by the
+`write-spec` loop skill, which closes those markers interactively (surface via `AskUserQuestion`
+→ re-invoke in **resolve mode** to fold answers in). The split is now **capability-driven**: the
+only thing that must live in the main thread is the live Q&A; everything else is autonomous.
+
+**Based on:**
+
+- **Spec-as-contract, WHAT-not-HOW** — the spec defines problem, boundaries (explicit
+  Non-goals), and **EARS** acceptance criteria (one testable statement per `AC-N`), sitting
+  upstream of `implementation-planner` (which owns the HOW).
+- **Autonomous, deferrable clarification** — instead of blocking on the user, the agent emits
+  `[NEEDS CLARIFICATION]` markers (forcing Status `draft`) so it can run headless; the `write-spec`
+  loop resolves them when a human is present. `AskUserQuestion` is unavailable to subagents, so this
+  marker round-trip is what keeps the writer both autonomous and honest.
+- **Write-scope isolation** — a dedicated subagent whose sole permitted write target is
+  `specs/**` (prompt-enforced), keeping spec authoring from touching source, tests, or config; it
+  gets `mcp__devdigest__get_conventions` / `get_blast_radius` explicitly (an explicit `tools:` list
+  otherwise excludes MCP tools).
+- **A global `SPEC-NN` registry** (`specs/INDEX.md`) as the single source of truth for IDs, with
+  a `draft → approved → implemented` lifecycle and explicit supersede links, so specs stay
+  traceable as they evolve. Provenance uses `[reused] / [deterministic: repo-intel] / [new: N
+  LLM calls]` (no lesson labels).
+
+**Sources:** 1, 6 — see [Sources](#sources) (subagent frontmatter + Spec-Driven Development).
+
 ---
 
 ## Sources
 
 All nine agents are grounded in the following, gathered via parallel `researcher` runs. Each
 agent section above lists its relevant rows under **Sources:** by number; `researcher` itself is
-self-contained (see its section). Rows 1–11 ground the planner/implementers, 12–17 the
+self-contained (see its section). Rows 1–11 ground the implementation-planner/implementers, 12–17 the
 test-writers, 18–23 the architecture-reviewer, 24–29 the plan-verifier, and 30–35 the doc-writer.
 
 | # | Title | URL | Used for |
@@ -256,7 +382,7 @@ test-writers, 18–23 the architecture-reviewer, 24–29 the plan-verifier, and 
 | 3 | Run parallel sessions with worktrees — Claude Code Docs | https://code.claude.com/docs/en/worktrees | `isolation: worktree` for subagents, parallel-edit isolation, `.worktreeinclude` (COPIES gitignored files), per-worktree env setup |
 | 4 | Run agents in parallel — Claude Code Docs | https://code.claude.com/docs/en/agents | Orchestrator/worker fan-out |
 | 5 | Best practices for Claude Code sub-agents — PubNub | https://www.pubnub.com/blog/best-practices-for-claude-code-sub-agents/ | Read-heavy planner vs write-heavy implementer, 3–5 worker sweet spot, naming collisions |
-| 6 | Spec-Driven Development — Thoughtworks | https://www.thoughtworks.com/en-de/insights/blog/agile-engineering-practices/spec-driven-development-unpacking-2025-new-engineering-practices | Planning/implementation split, spec-as-contract content |
+| 6 | Spec-Driven Development — Thoughtworks | https://www.thoughtworks.com/en-de/insights/blog/agile-engineering-practices/spec-driven-development-unpacking-2025-new-engineering-practices | Spec-vs-implementation-planning split; requirements are the input, the plan is the HOW |
 | 7 | Git Worktrees for Parallel AI Agent Execution — Augment Code | https://www.augmentcode.com/guides/git-worktrees-parallel-ai-agent-execution | File-ownership-up-front, sequence shared-file tasks |
 | 8 | Parallel Agentic Development With Git Worktrees — MindStudio | https://www.mindstudio.ai/blog/parallel-agentic-development-git-worktrees | Worktree-per-worker workflow |
 | 9 | Git worktrees for parallel AI coding agents — Upsun Developer | https://developer.upsun.com/posts/ai/git-worktrees-for-parallel-ai-coding-agents | Disjoint-file-set rule for parallelism |

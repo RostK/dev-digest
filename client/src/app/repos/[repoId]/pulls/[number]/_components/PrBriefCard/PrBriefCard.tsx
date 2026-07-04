@@ -1,0 +1,276 @@
+/* PrBriefCard — PR Why+Risk Brief (SPEC-04). A present brief renders as THREE
+   separate cards, stacked: Summary (the live review row — verdict/score/cost/
+   findings, composed from the PR's reviews NOT the brief — plus what/why/risk
+   level and Regenerate), Risk areas, and Review focus. Before a brief exists the
+   card collapses to ONE: loading (isPending), ERROR (isError — the query failed,
+   e.g. 404/500; never offers Generate then), or empty (an explicit Generate
+   button, no auto-fire, AC-7). File references in the Risk areas and Review focus
+   cards deep-link INTO the Smart Changes diff tab (?tab=diff&file=…) via
+   client-side navigation, so a reviewer stays in-app and lands on the file
+   instead of bouncing out to GitHub. A failed generate/regenerate surfaces an
+   inline error near the button instead of failing silently. */
+"use client";
+
+import React from "react";
+import { useParams, useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, Badge, SectionLabel, MonoLink, Icon } from "@devdigest/ui";
+import type { Brief, Risk, ReviewFocus } from "@devdigest/shared";
+import { useBrief, useGenerateBrief } from "@/lib/hooks";
+import { usePrReviews, usePrRuns } from "@/lib/hooks/reviews";
+import { latestReviewsPerAgent } from "@/components/SeverityIndicators";
+import { RISK_COLOR, relativeTimeAgo } from "./helpers";
+import { s } from "./styles";
+
+type T = ReturnType<typeof useTranslations>;
+
+interface PrBriefCardProps {
+  prId: string;
+}
+
+export function PrBriefCard({ prId }: PrBriefCardProps) {
+  const t = useTranslations("brief");
+  const params = useParams<{ repoId: string; number: string }>();
+  const router = useRouter();
+  const { data: brief, isPending, isError: briefIsError } = useBrief(prId);
+  const generate = useGenerateBrief(prId);
+
+  const { data: reviews } = usePrReviews(prId);
+  const { data: runs } = usePrRuns(prId);
+
+  // Deep-link a file reference INTO the Smart Changes diff tab of THIS PR,
+  // client-side (router.push) so the diff tab focuses + scrolls to the file
+  // without a full reload — the reviewer stays in-app.
+  const openFile = React.useCallback(
+    (path: string) => {
+      const q = new URLSearchParams({ tab: "diff", file: path });
+      router.push(`/repos/${params.repoId}/pulls/${params.number}?${q.toString()}`);
+    },
+    [router, params.repoId, params.number],
+  );
+
+  // Brief present → three separate cards.
+  if (!briefIsError && brief != null) {
+    const risk = RISK_COLOR[brief.risk_level];
+    const generatedAgo = relativeTimeAgo(brief.generated_at);
+    const regenerate = (
+      <Button
+        kind="ghost"
+        size="sm"
+        icon="RefreshCw"
+        disabled={generate.isPending}
+        loading={generate.isPending}
+        onClick={() => generate.mutate()}
+      >
+        {t("regenerate")}
+      </Button>
+    );
+
+    return (
+      <>
+        {/* Card 1 — Summary: live review row + what / why / risk level */}
+        <div style={s.card}>
+          <SectionLabel icon="FileText" right={regenerate}>
+            {t("title")}
+          </SectionLabel>
+          <div style={s.scroll}>
+            <TopRow reviews={reviews} runs={runs} t={t} />
+
+            {generate.isError && (
+              <p style={{ ...s.emptyHint, color: "var(--crit)", margin: 0 }} role="alert">
+                {t("generateError")}
+              </p>
+            )}
+
+            <div style={s.section}>
+              <div>
+                <div style={s.sectionHeading}>{t("what")}</div>
+                <p style={s.what}>{brief.what}</p>
+              </div>
+              <div>
+                <div style={s.sectionHeading}>{t("why")}</div>
+                <p style={s.why}>{brief.why}</p>
+              </div>
+              <div>
+                <div style={s.sectionHeading}>{t("riskLevel")}</div>
+                <span style={s.riskChip(risk.color, risk.bg)}>
+                  <Icon.AlertTriangle size={12} />
+                  {t(`risk.${brief.risk_level}`)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2 — Risk areas */}
+        <div style={s.card}>
+          <SectionLabel icon="AlertTriangle">{t("risks")}</SectionLabel>
+          <div style={s.scroll}>
+            {brief.risks.length === 0 && <p style={s.emptyHint}>{t("noRisks")}</p>}
+            {brief.risks.map((r, i) => (
+              <RiskRow key={`${r.title}:${i}`} risk={r} onOpenFile={openFile} t={t} />
+            ))}
+          </div>
+        </div>
+
+        {/* Card 3 — Review focus */}
+        <div style={s.card}>
+          <SectionLabel icon="Target">{t("reviewFocus")}</SectionLabel>
+          <div style={s.scroll}>
+            {brief.review_focus.length === 0 && <p style={s.emptyHint}>{t("noFocus")}</p>}
+            {brief.review_focus.map((f, i) => (
+              <FocusRow key={`${f.path}:${f.line}:${i}`} focus={f} onOpenFile={openFile} />
+            ))}
+            {generatedAgo && (
+              <div style={s.footerRow}>
+                <span style={s.generatedAt}>{t("generatedAt", { relative: generatedAgo })}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // No brief yet / loading / error → a single card (three empty cards would be noise).
+  return (
+    <div style={s.card}>
+      <SectionLabel icon="FileText">{t("title")}</SectionLabel>
+      <div style={s.scroll}>
+        <TopRow reviews={reviews} runs={runs} t={t} />
+
+        {!isPending && briefIsError && <ErrorBody t={t} />}
+
+        {!isPending && !briefIsError && brief == null && (
+          <EmptyBody
+            generate={() => generate.mutate()}
+            pending={generate.isPending}
+            generateIsError={generate.isError}
+            t={t}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The brief QUERY itself failed (e.g. 404 cross-workspace, 500) — an explicit
+ *  error state, distinct from "no brief yet". Never offers Generate here: a
+ *  broken read gives no signal the write would succeed. */
+function ErrorBody({ t }: { t: T }) {
+  return (
+    <div style={s.emptyWrap}>
+      <p style={{ ...s.emptyHint, color: "var(--crit)" }} role="alert">
+        {t("loadError")}
+      </p>
+    </div>
+  );
+}
+
+/** Verdict/score/cost/findings from the PR's latest-per-agent reviews — NOT
+ *  the Brief. Renders neutral/empty text when no review exists yet. */
+function TopRow({
+  reviews,
+  runs,
+  t,
+}: {
+  reviews: ReturnType<typeof usePrReviews>["data"];
+  runs: ReturnType<typeof usePrRuns>["data"];
+  t: T;
+}) {
+  const latest = latestReviewsPerAgent(reviews ?? []);
+  const findingsCount = latest.reduce((n, r) => n + r.findings.filter((f) => !f.dismissed_at).length, 0);
+  const runById = new Map((runs ?? []).map((r) => [r.run_id, r]));
+  // Prefer the most recently created review with a verdict/score for the badges.
+  const primary = [...latest].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const run = primary?.run_id ? runById.get(primary.run_id) ?? null : null;
+
+  if (!primary) {
+    return (
+      <div style={s.topRow}>
+        <Badge color="var(--text-muted)">{t("noReview")}</Badge>
+      </div>
+    );
+  }
+
+  return (
+    <div style={s.topRow}>
+      {primary.verdict && (
+        <Badge color="var(--text-secondary)">{t(`verdict.${primary.verdict}`)}</Badge>
+      )}
+      {primary.score != null && <Badge icon="Target">{t("score", { value: primary.score })}</Badge>}
+      <Badge icon="DollarSign">
+        {run?.cost_usd != null ? t("cost", { value: run.cost_usd.toFixed(4) }) : t("costUnknown")}
+      </Badge>
+      <Badge icon="AlertTriangle">{t("findings", { count: findingsCount })}</Badge>
+    </div>
+  );
+}
+
+function EmptyBody({
+  generate,
+  pending,
+  generateIsError,
+  t,
+}: {
+  generate: () => void;
+  pending: boolean;
+  generateIsError: boolean;
+  t: T;
+}) {
+  return (
+    <div style={s.emptyWrap}>
+      <p style={s.emptyHint}>{t("empty")}</p>
+      <p style={s.emptyHint}>{t("emptyHint")}</p>
+      <Button kind="primary" size="sm" icon="Sparkles" loading={pending} disabled={pending} onClick={generate}>
+        {t("generate")}
+      </Button>
+      {generateIsError && (
+        <p style={{ ...s.emptyHint, color: "var(--crit)" }} role="alert">
+          {t("generateError")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RiskRow({
+  risk,
+  onOpenFile,
+  t,
+}: {
+  risk: Risk;
+  onOpenFile: (path: string) => void;
+  t: T;
+}) {
+  const c = RISK_COLOR[risk.severity];
+  return (
+    <div style={s.riskItem}>
+      <div style={s.riskTitleRow}>
+        <span style={s.riskChip(c.color, c.bg)}>{t(`risk.${risk.severity}`)}</span>
+        <span style={s.riskTitle}>{risk.title}</span>
+      </div>
+      <p style={s.riskExplanation}>{risk.explanation}</p>
+      {risk.file_refs.length > 0 && (
+        <div style={s.riskRefs}>
+          {risk.file_refs.map((ref, i) => (
+            <MonoLink key={`${ref}:${i}`} onClick={() => onOpenFile(ref)}>
+              {ref}
+            </MonoLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FocusRow({ focus, onOpenFile }: { focus: ReviewFocus; onOpenFile: (path: string) => void }) {
+  return (
+    <div style={s.focusItem}>
+      <MonoLink onClick={() => onOpenFile(focus.path)}>
+        {focus.path}:{focus.line}
+      </MonoLink>
+      <p style={s.focusReason}>{focus.reason}</p>
+    </div>
+  );
+}

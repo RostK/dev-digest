@@ -29,6 +29,12 @@ export type Conformance = z.infer<typeof Conformance>;
 export const OnboardingLink = z.object({
   label: z.string(),
   path: z.string(),
+  // Free-text "why this matters" note. Model-authored.
+  rationale: z.string().nullish(),
+  // Deterministic "used by N routes/callers" count, filled by the SERVER from
+  // repo-intel blast-radius AFTER generation — nullish so LLM output validates
+  // before the count is attached (never model-authored — see AC-12).
+  used_by: z.number().int().nullish(),
 });
 export type OnboardingLink = z.infer<typeof OnboardingLink>;
 
@@ -45,6 +51,23 @@ export const Onboarding = z.object({
   sections: z.array(OnboardingSection),
 });
 export type Onboarding = z.infer<typeof Onboarding>;
+
+export const OnboardingJobStatus = z.object({
+  job_id: z.string(),
+  status: z.enum(['queued', 'running', 'done', 'failed']),
+  error: z.string().nullish(),
+});
+export type OnboardingJobStatus = z.infer<typeof OnboardingJobStatus>;
+
+export const OnboardingResponse = z.object({
+  tour: Onboarding.nullable(),
+  generated_at: z.string().nullable(),
+  files_indexed: z.number().int(),
+  indexed: z.boolean(),
+  stale: z.boolean(),
+  job: OnboardingJobStatus.nullish(),
+});
+export type OnboardingResponse = z.infer<typeof OnboardingResponse>;
 
 // ---- Eval ----
 export const EvalPerTrace = z.object({
@@ -195,6 +218,8 @@ export const ConventionCandidate = z.object({
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
 
 // ---- Agents ----
+// 'openrouter' routes through the OpenAI-compatible API (OpenAIProvider with a
+// custom baseURL) — used by the CI runner for cheap models (DeepSeek/GLM/MiniMax).
 export const Provider = z.enum(['openai', 'anthropic', 'openrouter']);
 export type Provider = z.infer<typeof Provider>;
 
@@ -205,8 +230,12 @@ export type Provider = z.infer<typeof Provider>;
 export const ReviewStrategy = z.enum(['single-pass', 'map-reduce', 'auto']);
 export type ReviewStrategy = z.infer<typeof ReviewStrategy>;
 
-// CI gate policy — when a CI review should BLOCK (REQUEST_CHANGES + fail the
-// check) vs just comment. Deterministic from severities; acted on ONLY in CI.
+// CI gate policy — when a review should BLOCK (REQUEST_CHANGES + fail the check)
+// vs just comment. Deterministic from finding severities, NOT the model's verdict:
+//  - never:    never block, always comment (advisory only)
+//  - critical: block iff >=1 CRITICAL finding (default)
+//  - warning:  block iff >=1 WARNING or CRITICAL finding
+//  - any:      block iff >=1 finding of any severity
 export const CiFailOn = z.enum(['never', 'critical', 'warning', 'any']);
 export type CiFailOn = z.infer<typeof CiFailOn>;
 
@@ -237,3 +266,50 @@ export const AgentSkillLink = z.object({
   enabled: z.boolean(),
 });
 export type AgentSkillLink = z.infer<typeof AgentSkillLink>;
+
+// The immutable config snapshot captured in `agent_versions` whenever an agent's
+// config changes (everything but `enabled`). Mirrors the shape written by the
+// agents repository — provider/model/prompt/output_schema/strategy/gate/repo_intel
+// plus the ordered skill ids linked at snapshot time. Used for reproducibility
+// (eval replays a past version) and for surfacing an agent's edit history.
+export const AgentVersionConfig = z.object({
+  provider: Provider,
+  model: z.string(),
+  system_prompt: z.string(),
+  output_schema: z.unknown().nullish(),
+  strategy: ReviewStrategy,
+  ci_fail_on: CiFailOn,
+  repo_intel: z.boolean(),
+  skills: z.array(z.string()),
+});
+export type AgentVersionConfig = z.infer<typeof AgentVersionConfig>;
+
+export const AgentVersion = z.object({
+  agent_id: z.string(),
+  version: z.number().int(),
+  config: AgentVersionConfig,
+  created_at: z.string(),
+});
+export type AgentVersion = z.infer<typeof AgentVersion>;
+
+// ---- Project Context ----
+// Which source folder a project-context doc was pulled from — drives the badge
+// shown next to each doc in the context picker UI.
+export const ContextBadge = z.enum(['specs', 'docs', 'insights']);
+export type ContextBadge = z.infer<typeof ContextBadge>;
+
+export const ProjectContextDoc = z.object({
+  path: z.string().min(1),
+  badge: ContextBadge,
+  tokens: z.number().int().min(0),
+  used_by: z.number().int().min(0),
+  // 0..1 ratio; the client renders it as a %.
+  coverage: z.number().min(0).max(1),
+});
+export type ProjectContextDoc = z.infer<typeof ProjectContextDoc>;
+
+export const ContextAttachment = z.object({
+  path: z.string().min(1),
+  order: z.number().int().min(0),
+});
+export type ContextAttachment = z.infer<typeof ContextAttachment>;

@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { SkillSource, SkillType } from '@devdigest/shared';
+import type { ContextAttachment, SkillSource, SkillType } from '@devdigest/shared';
 import { DEFAULT_SKILL_DESCRIPTION, INITIAL_SKILL_VERSION } from './constants.js';
 import { isBodyChange, type SkillPatch } from './helpers.js';
 
@@ -127,5 +127,30 @@ export class SkillsRepository {
       .insert(t.skillVersions)
       .values({ skillId: row.id, version, body: row.body })
       .onConflictDoNothing();
+  }
+
+  // ---- skill_context_docs (Project Context attach — T5) -------------------
+
+  /** Context docs attached to a skill, ordered ascending (AC-6, AC-8: paths only, never text). */
+  async contextDocsForSkill(skillId: string): Promise<ContextAttachment[]> {
+    return this.db
+      .select({ path: t.skillContextDocs.path, order: t.skillContextDocs.order })
+      .from(t.skillContextDocs)
+      .where(eq(t.skillContextDocs.skillId, skillId))
+      .orderBy(asc(t.skillContextDocs.order));
+  }
+
+  /**
+   * Replace the full set of context docs attached to a skill with `paths`, in the
+   * given order (order = array index). Mirrors `agent_context_docs.setContextDocs`
+   * and `agent_skills.setSkills`: delete-then-insert. No per-doc `enabled` column
+   * — AC-4 forbids per-doc enable in v1; omit a path to detach it.
+   */
+  async setContextDocs(skillId: string, paths: string[]): Promise<void> {
+    await this.db.delete(t.skillContextDocs).where(eq(t.skillContextDocs.skillId, skillId));
+    if (paths.length === 0) return;
+    await this.db
+      .insert(t.skillContextDocs)
+      .values(paths.map((path, order) => ({ skillId, path, order })));
   }
 }
