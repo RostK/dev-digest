@@ -1,14 +1,13 @@
-/* PrBriefCard — PR Why+Risk Brief (SPEC-04). Top row is composed live from the
-   PR's review data (verdict/score/cost/findings), NOT from the Brief — a review
-   can exist without a brief and vice versa. The body has three states off the
-   brief query: loading (isPending), ERROR (isError — the query itself failed,
-   e.g. 404/500; never offers Generate in that case), and loaded (null shows an
-   explicit Generate button, no auto-fire, AC-7; a present brief renders as THREE
-   sections — Summary (what/why/risk level), Risk areas, and Review focus — plus
-   Regenerate, AC-6). File references in the Risk areas and Review focus sections
-   deep-link INTO the Smart Changes diff tab (?tab=diff&file=…) via client-side
-   navigation, so a reviewer stays in-app and lands on the file instead of
-   bouncing out to GitHub. A failed generate/regenerate mutation surfaces an
+/* PrBriefCard — PR Why+Risk Brief (SPEC-04). A present brief renders as THREE
+   separate cards, stacked: Summary (the live review row — verdict/score/cost/
+   findings, composed from the PR's reviews NOT the brief — plus what/why/risk
+   level and Regenerate), Risk areas, and Review focus. Before a brief exists the
+   card collapses to ONE: loading (isPending), ERROR (isError — the query failed,
+   e.g. 404/500; never offers Generate then), or empty (an explicit Generate
+   button, no auto-fire, AC-7). File references in the Risk areas and Review focus
+   cards deep-link INTO the Smart Changes diff tab (?tab=diff&file=…) via
+   client-side navigation, so a reviewer stays in-app and lands on the file
+   instead of bouncing out to GitHub. A failed generate/regenerate surfaces an
    inline error near the button instead of failing silently. */
 "use client";
 
@@ -50,28 +49,93 @@ export function PrBriefCard({ prId }: PrBriefCardProps) {
     [router, params.repoId, params.number],
   );
 
+  // Brief present → three separate cards.
+  if (!briefIsError && brief != null) {
+    const risk = RISK_COLOR[brief.risk_level];
+    const generatedAgo = relativeTimeAgo(brief.generated_at);
+    const regenerate = (
+      <Button
+        kind="ghost"
+        size="sm"
+        icon="RefreshCw"
+        disabled={generate.isPending}
+        loading={generate.isPending}
+        onClick={() => generate.mutate()}
+      >
+        {t("regenerate")}
+      </Button>
+    );
+
+    return (
+      <>
+        {/* Card 1 — Summary: live review row + what / why / risk level */}
+        <div style={s.card}>
+          <SectionLabel icon="FileText" right={regenerate}>
+            {t("title")}
+          </SectionLabel>
+          <div style={s.scroll}>
+            <TopRow reviews={reviews} runs={runs} t={t} />
+
+            {generate.isError && (
+              <p style={{ ...s.emptyHint, color: "var(--crit)", margin: 0 }} role="alert">
+                {t("generateError")}
+              </p>
+            )}
+
+            <div style={s.section}>
+              <div>
+                <div style={s.sectionHeading}>{t("what")}</div>
+                <p style={s.what}>{brief.what}</p>
+              </div>
+              <div>
+                <div style={s.sectionHeading}>{t("why")}</div>
+                <p style={s.why}>{brief.why}</p>
+              </div>
+              <div>
+                <div style={s.sectionHeading}>{t("riskLevel")}</div>
+                <span style={s.riskChip(risk.color, risk.bg)}>
+                  <Icon.AlertTriangle size={12} />
+                  {t(`risk.${brief.risk_level}`)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2 — Risk areas */}
+        <div style={s.card}>
+          <SectionLabel icon="AlertTriangle">{t("risks")}</SectionLabel>
+          <div style={s.scroll}>
+            {brief.risks.length === 0 && <p style={s.emptyHint}>{t("noRisks")}</p>}
+            {brief.risks.map((r, i) => (
+              <RiskRow key={`${r.title}:${i}`} risk={r} onOpenFile={openFile} t={t} />
+            ))}
+          </div>
+        </div>
+
+        {/* Card 3 — Review focus */}
+        <div style={s.card}>
+          <SectionLabel icon="Target">{t("reviewFocus")}</SectionLabel>
+          <div style={s.scroll}>
+            {brief.review_focus.length === 0 && <p style={s.emptyHint}>{t("noFocus")}</p>}
+            {brief.review_focus.map((f, i) => (
+              <FocusRow key={`${f.path}:${f.line}:${i}`} focus={f} onOpenFile={openFile} />
+            ))}
+            {generatedAgo && (
+              <div style={s.footerRow}>
+                <span style={s.generatedAt}>{t("generatedAt", { relative: generatedAgo })}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // No brief yet / loading / error → a single card (three empty cards would be noise).
   return (
     <div style={s.card}>
-      <SectionLabel
-        icon="FileText"
-        right={
-          brief != null ? (
-            <Button
-              kind="ghost"
-              size="sm"
-              icon="RefreshCw"
-              disabled={generate.isPending}
-              loading={generate.isPending}
-              onClick={() => generate.mutate()}
-            >
-              {t("regenerate")}
-            </Button>
-          ) : undefined
-        }
-      >
-        {t("title")}
-      </SectionLabel>
-
+      <SectionLabel icon="FileText">{t("title")}</SectionLabel>
       <div style={s.scroll}>
         <TopRow reviews={reviews} runs={runs} t={t} />
 
@@ -84,10 +148,6 @@ export function PrBriefCard({ prId }: PrBriefCardProps) {
             generateIsError={generate.isError}
             t={t}
           />
-        )}
-
-        {!briefIsError && brief != null && (
-          <BriefBody brief={brief} onOpenFile={openFile} generateIsError={generate.isError} t={t} />
         )}
       </div>
     </div>
@@ -171,76 +231,6 @@ function EmptyBody({
         </p>
       )}
     </div>
-  );
-}
-
-function BriefBody({
-  brief,
-  onOpenFile,
-  generateIsError,
-  t,
-}: {
-  brief: Brief;
-  onOpenFile: (path: string) => void;
-  generateIsError: boolean;
-  t: T;
-}) {
-  const risk = RISK_COLOR[brief.risk_level];
-  const generatedAgo = relativeTimeAgo(brief.generated_at);
-
-  return (
-    <>
-      {generateIsError && (
-        <p style={{ ...s.emptyHint, color: "var(--crit)", margin: 0 }} role="alert">
-          {t("generateError")}
-        </p>
-      )}
-
-      {/* Section 1 — Summary: what / why / risk level */}
-      <div style={s.section}>
-        <div>
-          <div style={s.sectionHeading}>{t("what")}</div>
-          <p style={s.what}>{brief.what}</p>
-        </div>
-
-        <div>
-          <div style={s.sectionHeading}>{t("why")}</div>
-          <p style={s.why}>{brief.why}</p>
-        </div>
-
-        <div>
-          <div style={s.sectionHeading}>{t("riskLevel")}</div>
-          <span style={s.riskChip(risk.color, risk.bg)}>
-            <Icon.AlertTriangle size={12} />
-            {t(`risk.${brief.risk_level}`)}
-          </span>
-        </div>
-      </div>
-
-      {/* Section 2 — Risk areas */}
-      <div style={s.sectionDivided}>
-        <div style={s.sectionTitle}>{t("risks")}</div>
-        {brief.risks.length === 0 && <p style={s.emptyHint}>{t("noRisks")}</p>}
-        {brief.risks.map((r, i) => (
-          <RiskRow key={`${r.title}:${i}`} risk={r} onOpenFile={onOpenFile} t={t} />
-        ))}
-      </div>
-
-      {/* Section 3 — Review focus */}
-      <div style={s.sectionDivided}>
-        <div style={s.sectionTitle}>{t("reviewFocus")}</div>
-        {brief.review_focus.length === 0 && <p style={s.emptyHint}>{t("noFocus")}</p>}
-        {brief.review_focus.map((f, i) => (
-          <FocusRow key={`${f.path}:${f.line}:${i}`} focus={f} onOpenFile={onOpenFile} />
-        ))}
-      </div>
-
-      {generatedAgo && (
-        <div style={s.footerRow}>
-          <span style={s.generatedAt}>{t("generatedAt", { relative: generatedAgo })}</span>
-        </div>
-      )}
-    </>
   );
 }
 
