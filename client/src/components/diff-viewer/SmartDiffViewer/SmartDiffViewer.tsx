@@ -25,6 +25,9 @@ export interface SmartDiffViewerProps {
   commenting?: DiffCommentApi;
   /** Per-file findings (full FindingRecord) from review data. When omitted nothing changes. */
   findingsBySeverity?: FindingsBySeverity;
+  /** Deep-link target path (?tab=diff&file=…) — its group is force-opened and the
+   *  file card focused + scrolled into view. */
+  focusPath?: string;
 }
 
 /* ---------- role display map ---------- */
@@ -96,6 +99,7 @@ function RoleGroup({
   commenting,
   startOpen,
   findingsBySeverity,
+  focusPath,
 }: {
   role: SmartDiffRole;
   files: { path: string; finding_lines: number[]; pseudocode_summary?: string | null }[];
@@ -103,9 +107,16 @@ function RoleGroup({
   commenting?: DiffCommentApi;
   startOpen: boolean;
   findingsBySeverity?: FindingsBySeverity;
+  focusPath?: string;
 }) {
   const t = useTranslations("prReview");
-  const [open, setOpen] = React.useState(startOpen);
+  // A focused deep-link target inside this group must be visible even if the
+  // group defaults collapsed (e.g. boilerplate).
+  const hasFocus = focusPath != null && files.some((f) => f.path === focusPath);
+  const [open, setOpen] = React.useState(startOpen || hasFocus);
+  React.useEffect(() => {
+    if (hasFocus) setOpen(true);
+  }, [hasFocus]);
 
   const label = t(ROLE_LABEL_KEY[role]);
   const desc = t(ROLE_DESC_KEY[role]);
@@ -162,6 +173,7 @@ function RoleGroup({
                 findings={fileFindings}
                 defaultOpen={cardDefaultOpen}
                 summary={sdFile.pseudocode_summary ?? null}
+                focused={focusPath === sdFile.path}
               />
             );
           })}
@@ -225,6 +237,7 @@ export function SmartDiffViewer({
   smartDiff,
   commenting,
   findingsBySeverity,
+  focusPath,
 }: SmartDiffViewerProps) {
   const { split_suggestion } = smartDiff;
 
@@ -246,6 +259,7 @@ export function SmartDiffViewer({
           commenting={commenting}
           startOpen={group.role !== "boilerplate"}
           findingsBySeverity={findingsBySeverity}
+          focusPath={focusPath}
         />
       ))}
     </div>

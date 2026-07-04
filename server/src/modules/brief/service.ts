@@ -35,7 +35,13 @@ export class BriefService {
   async getCachedBrief(workspaceId: string, prId: string): Promise<Brief | null> {
     const pull = await this.container.reviewRepo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
-    return this.repo.getBrief(prId);
+    const brief = await this.repo.getBrief(prId);
+    // Staleness: a brief carries the head SHA it was generated against. Once the
+    // PR gets a new commit, that SHA no longer matches the pull's current head —
+    // the brief is out of date, so hide it (null) and let the UI offer Generate.
+    // Legacy briefs (no head_sha) are shown as-is; their staleness is unknowable.
+    if (brief?.head_sha && brief.head_sha !== pull.headSha) return null;
+    return brief;
   }
 
   /** Generate (or regenerate) the brief for a PR. Exactly ONE `container.llm`
@@ -96,7 +102,12 @@ export class BriefService {
       onLog,
     );
 
-    const persisted: Brief = { ...brief.value, generated_at: new Date().toISOString() };
+    const persisted: Brief = {
+      ...brief.value,
+      generated_at: new Date().toISOString(),
+      // Pin the brief to the commit it describes so a later commit invalidates it.
+      head_sha: pull.headSha,
+    };
 
     if (!brief.degraded) {
       // Non-degraded generation ALWAYS overwrites (AC-6: an explicit

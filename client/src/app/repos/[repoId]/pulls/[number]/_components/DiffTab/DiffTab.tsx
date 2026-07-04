@@ -25,6 +25,8 @@ interface DiffTabProps {
   files: PrFile[];
   /** Inline commenting is offered only on open PRs (GitHub rejects otherwise). */
   canComment?: boolean;
+  /** Deep-link target from ?file= — the diff scrolls to and expands this file. */
+  focusPath?: string;
 }
 
 type ViewMode = "smart" | "original";
@@ -52,7 +54,7 @@ function buildFindingsByPath(reviews: ReturnType<typeof usePrReviews>["data"]): 
   return map;
 }
 
-export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+export function DiffTab({ prId, filesCount, files, canComment, focusPath }: DiffTabProps) {
   const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
@@ -139,9 +141,10 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
           smartDiff={smartDiff}
           commenting={commenting}
           findingsBySeverity={findingsBySeverity}
+          focusPath={focusPath}
         />
       ) : (
-        <DiffViewer files={files} commenting={commenting} />
+        <DiffViewer files={files} commenting={commenting} focusPath={focusPath} />
       )}
     </section>
   );

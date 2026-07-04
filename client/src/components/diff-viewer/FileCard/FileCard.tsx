@@ -8,7 +8,7 @@ import { Icon } from "@devdigest/ui";
 import type { Severity, FindingRecord } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
-import { parsePatch, type Line } from "../helpers";
+import { parsePatch, fileAnchorId, DIFF_SCROLL_MARGIN_TOP, type Line } from "../helpers";
 import {
   buildThreads,
   keysForLine,
@@ -66,7 +66,9 @@ function FindingsBadge({
         if (firstLine != null) {
           requestAnimationFrame(() => {
             const id = `sd-${filePath}-L${firstLine}`;
-            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            // block:"start" so the line's scroll-margin-top (which clears the
+            // sticky PR header) takes effect — "center" ignores scroll-margin.
+            document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
           });
         }
       }}
@@ -144,6 +146,7 @@ export function FileCard({
   findingLines,
   defaultOpen,
   summary,
+  focused,
 }: {
   file: PrFile;
   commenting?: DiffCommentApi;
@@ -156,6 +159,9 @@ export function FileCard({
   defaultOpen?: boolean;
   /** Pseudocode summary from the smart diff (shown under the header). */
   summary?: string | null;
+  /** This card is the deep-link target (?tab=diff&file=…) — force it open and
+   *  scroll it into view when it becomes focused. */
+  focused?: boolean;
 }) {
   const t = useTranslations("shell");
 
@@ -174,8 +180,18 @@ export function FileCard({
   );
 
   const [open, setOpen] = React.useState(
-    defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES
+    focused || (defaultOpen ?? (file.additions ?? 0) + (file.deletions ?? 0) <= AUTO_EXPAND_MAX_LINES)
   );
+
+  // Deep-link target: when this file becomes focused (initial mount OR the ?file=
+  // param later points here while the tab is already open), expand it and scroll
+  // it into view. rAF defers the scroll until the just-expanded body is laid out.
+  React.useEffect(() => {
+    if (!focused) return;
+    setOpen(true);
+    const el = document.getElementById(fileAnchorId(file.path));
+    if (el) requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }, [focused, file.path]);
   const lines = React.useMemo(() => parsePatch(file.patch), [file.patch]);
 
   // Group this file's comments into threads, then split into ones we can anchor
@@ -207,7 +223,7 @@ export function FileCard({
   const hasSummary = !!summary;
 
   return (
-    <div style={s.fileCard}>
+    <div style={{ ...s.fileCard, scrollMarginTop: DIFF_SCROLL_MARGIN_TOP }} id={fileAnchorId(file.path)}>
       <div onClick={() => setOpen((o) => !o)} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />

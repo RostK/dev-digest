@@ -130,5 +130,12 @@ export const Brief = z.object({
   risks: z.array(Risk),
   review_focus: z.array(ReviewFocus),
   generated_at: z.string().optional(),
+  // The PR head SHA this brief was generated against. Stamped by the service at
+  // persist time (like generated_at, inside the json blob — pr_brief has no
+  // column for it). The read boundary treats a brief whose head_sha no longer
+  // matches the PR's current head as STALE and hides it (returns null), so a new
+  // commit no longer serves an out-of-date brief. Optional for legacy blobs
+  // written before this field existed (their staleness is unknowable → shown).
+  head_sha: z.string().optional(),
 });
 export type Brief = z.infer<typeof Brief>;

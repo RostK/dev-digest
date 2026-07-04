@@ -18,7 +18,7 @@ interface OverviewTabProps {
 export function OverviewTab({ prBody, prId, repoFullName, headSha }: OverviewTabProps) {
   return (
     <>
-      <PrBriefCard prId={prId} repoFullName={repoFullName} headSha={headSha} />
+      <PrBriefCard prId={prId} />
 
       {/* Intent (left) + Blast radius (right), mirroring the PR-brief design. */}
       <div style={s.brief}>

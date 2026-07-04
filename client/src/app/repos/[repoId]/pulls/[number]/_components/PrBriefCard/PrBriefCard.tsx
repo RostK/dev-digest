@@ -2,22 +2,24 @@
    PR's review data (verdict/score/cost/findings), NOT from the Brief — a review
    can exist without a brief and vice versa. The body has three states off the
    brief query: loading (isPending), ERROR (isError — the query itself failed,
-   e.g. 404/500; never offers Generate in that case, REVIEW FIX #5), and loaded
-   (null shows an explicit Generate button, no auto-fire, AC-7; a present brief
-   renders what/why, a color+label risk level (AC-9), risks, and review-focus
-   rows linking out to GitHub (AC-12), plus Regenerate (AC-6)). A failed
-   generate/regenerate mutation surfaces an inline error near the button
-   instead of failing silently (REVIEW FIX #5). */
+   e.g. 404/500; never offers Generate in that case), and loaded (null shows an
+   explicit Generate button, no auto-fire, AC-7; a present brief renders as THREE
+   sections — Summary (what/why/risk level), Risk areas, and Review focus — plus
+   Regenerate, AC-6). File references in the Risk areas and Review focus sections
+   deep-link INTO the Smart Changes diff tab (?tab=diff&file=…) via client-side
+   navigation, so a reviewer stays in-app and lands on the file instead of
+   bouncing out to GitHub. A failed generate/regenerate mutation surfaces an
+   inline error near the button instead of failing silently. */
 "use client";
 
 import React from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Badge, SectionLabel, MonoLink, Icon } from "@devdigest/ui";
 import type { Brief, Risk, ReviewFocus } from "@devdigest/shared";
 import { useBrief, useGenerateBrief } from "@/lib/hooks";
 import { usePrReviews, usePrRuns } from "@/lib/hooks/reviews";
 import { latestReviewsPerAgent } from "@/components/SeverityIndicators";
-import { githubBlobUrl } from "@/lib/github-urls";
 import { RISK_COLOR, relativeTimeAgo } from "./helpers";
 import { s } from "./styles";
 
@@ -25,17 +27,28 @@ type T = ReturnType<typeof useTranslations>;
 
 interface PrBriefCardProps {
   prId: string;
-  repoFullName?: string | null;
-  headSha?: string | null;
 }
 
-export function PrBriefCard({ prId, repoFullName, headSha }: PrBriefCardProps) {
+export function PrBriefCard({ prId }: PrBriefCardProps) {
   const t = useTranslations("brief");
+  const params = useParams<{ repoId: string; number: string }>();
+  const router = useRouter();
   const { data: brief, isPending, isError: briefIsError } = useBrief(prId);
   const generate = useGenerateBrief(prId);
 
   const { data: reviews } = usePrReviews(prId);
   const { data: runs } = usePrRuns(prId);
+
+  // Deep-link a file reference INTO the Smart Changes diff tab of THIS PR,
+  // client-side (router.push) so the diff tab focuses + scrolls to the file
+  // without a full reload — the reviewer stays in-app.
+  const openFile = React.useCallback(
+    (path: string) => {
+      const q = new URLSearchParams({ tab: "diff", file: path });
+      router.push(`/repos/${params.repoId}/pulls/${params.number}?${q.toString()}`);
+    },
+    [router, params.repoId, params.number],
+  );
 
   return (
     <div style={s.card}>
@@ -74,13 +87,7 @@ export function PrBriefCard({ prId, repoFullName, headSha }: PrBriefCardProps) {
         )}
 
         {!briefIsError && brief != null && (
-          <BriefBody
-            brief={brief}
-            repoFullName={repoFullName}
-            headSha={headSha}
-            generateIsError={generate.isError}
-            t={t}
-          />
+          <BriefBody brief={brief} onOpenFile={openFile} generateIsError={generate.isError} t={t} />
         )}
       </div>
     </div>
@@ -169,18 +176,15 @@ function EmptyBody({
 
 function BriefBody({
   brief,
-  repoFullName,
-  headSha,
+  onOpenFile,
   generateIsError,
   t,
 }: {
   brief: Brief;
-  repoFullName?: string | null;
-  headSha?: string | null;
+  onOpenFile: (path: string) => void;
   generateIsError: boolean;
   t: T;
 }) {
-  const canLink = !!(repoFullName && headSha);
   const risk = RISK_COLOR[brief.risk_level];
   const generatedAgo = relativeTimeAgo(brief.generated_at);
 
@@ -192,41 +196,42 @@ function BriefBody({
         </p>
       )}
 
-      <div>
-        <div style={s.sectionHeading}>{t("what")}</div>
-        <p style={s.what}>{brief.what}</p>
+      {/* Section 1 — Summary: what / why / risk level */}
+      <div style={s.section}>
+        <div>
+          <div style={s.sectionHeading}>{t("what")}</div>
+          <p style={s.what}>{brief.what}</p>
+        </div>
+
+        <div>
+          <div style={s.sectionHeading}>{t("why")}</div>
+          <p style={s.why}>{brief.why}</p>
+        </div>
+
+        <div>
+          <div style={s.sectionHeading}>{t("riskLevel")}</div>
+          <span style={s.riskChip(risk.color, risk.bg)}>
+            <Icon.AlertTriangle size={12} />
+            {t(`risk.${brief.risk_level}`)}
+          </span>
+        </div>
       </div>
 
-      <div>
-        <div style={s.sectionHeading}>{t("why")}</div>
-        <p style={s.why}>{brief.why}</p>
-      </div>
-
-      <div>
-        <div style={s.sectionHeading}>{t("riskLevel")}</div>
-        <span style={s.riskChip(risk.color, risk.bg)}>
-          <Icon.AlertTriangle size={12} />
-          {t(`risk.${brief.risk_level}`)}
-        </span>
-      </div>
-
-      <div>
-        <div style={s.sectionHeading}>{t("risks")}</div>
+      {/* Section 2 — Risk areas */}
+      <div style={s.sectionDivided}>
+        <div style={s.sectionTitle}>{t("risks")}</div>
         {brief.risks.length === 0 && <p style={s.emptyHint}>{t("noRisks")}</p>}
         {brief.risks.map((r, i) => (
-          <RiskRow key={`${r.title}:${i}`} risk={r} t={t} />
+          <RiskRow key={`${r.title}:${i}`} risk={r} onOpenFile={onOpenFile} t={t} />
         ))}
       </div>
 
-      <div>
-        <div style={s.sectionHeading}>{t("reviewFocus")}</div>
+      {/* Section 3 — Review focus */}
+      <div style={s.sectionDivided}>
+        <div style={s.sectionTitle}>{t("reviewFocus")}</div>
         {brief.review_focus.length === 0 && <p style={s.emptyHint}>{t("noFocus")}</p>}
         {brief.review_focus.map((f, i) => (
-          <FocusRow
-            key={`${f.path}:${f.line}:${i}`}
-            focus={f}
-            href={canLink ? githubBlobUrl(repoFullName!, headSha!, f.path, f.line) : undefined}
-          />
+          <FocusRow key={`${f.path}:${f.line}:${i}`} focus={f} onOpenFile={onOpenFile} />
         ))}
       </div>
 
@@ -239,7 +244,15 @@ function BriefBody({
   );
 }
 
-function RiskRow({ risk, t }: { risk: Risk; t: T }) {
+function RiskRow({
+  risk,
+  onOpenFile,
+  t,
+}: {
+  risk: Risk;
+  onOpenFile: (path: string) => void;
+  t: T;
+}) {
   const c = RISK_COLOR[risk.severity];
   return (
     <div style={s.riskItem}>
@@ -248,14 +261,23 @@ function RiskRow({ risk, t }: { risk: Risk; t: T }) {
         <span style={s.riskTitle}>{risk.title}</span>
       </div>
       <p style={s.riskExplanation}>{risk.explanation}</p>
+      {risk.file_refs.length > 0 && (
+        <div style={s.riskRefs}>
+          {risk.file_refs.map((ref, i) => (
+            <MonoLink key={`${ref}:${i}`} onClick={() => onOpenFile(ref)}>
+              {ref}
+            </MonoLink>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function FocusRow({ focus, href }: { focus: ReviewFocus; href?: string }) {
+function FocusRow({ focus, onOpenFile }: { focus: ReviewFocus; onOpenFile: (path: string) => void }) {
   return (
     <div style={s.focusItem}>
-      <MonoLink href={href}>
+      <MonoLink onClick={() => onOpenFile(focus.path)}>
         {focus.path}:{focus.line}
       </MonoLink>
       <p style={s.focusReason}>{focus.reason}</p>

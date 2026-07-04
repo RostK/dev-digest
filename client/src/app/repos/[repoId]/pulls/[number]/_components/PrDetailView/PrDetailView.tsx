@@ -60,6 +60,9 @@ export function PrDetailView() {
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
+  // Deep-link target within the diff tab (?tab=diff&file=…) — set by the Brief's
+  // Risk-area / Review-focus links so the diff scrolls to and expands that file.
+  const focusFile = search.get("file");
   const setParam = (key: string, val: string | null) => {
     const sp = new URLSearchParams(search.toString());
     if (val == null) sp.delete(key);
@@ -179,6 +182,7 @@ export function PrDetailView() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            focusPath={focusFile ?? undefined}
           />
         )}
       </div>

@@ -28,6 +28,25 @@ export function PrDetailHeader({
   onRunStart,
   onRunsStarted,
 }: PrDetailHeaderProps) {
+  // Publish the sticky header's live height as a CSS var so scroll-to-file /
+  // scroll-to-line targets in the diff can offset by it (otherwise scrollIntoView
+  // aligns them to y=0, under this sticky panel). Height is dynamic — title wrap,
+  // the merged/closed banner, tab count — so measure it rather than hard-code.
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const publish = () =>
+      document.documentElement.style.setProperty("--pr-detail-header-h", `${el.offsetHeight}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      document.documentElement.style.removeProperty("--pr-detail-header-h");
+    };
+  }, []);
+
   const handleRunStart = useCallback(() => {
     onRunStart();
   }, [onRunStart]);
@@ -44,7 +63,7 @@ export function PrDetailHeader({
         : "var(--warn)";
 
   return (
-    <div style={s.root}>
+    <div ref={rootRef} style={s.root}>
       <div style={s.titleRow}>
         <div style={s.titleCol}>
           <h1 style={s.h1}>

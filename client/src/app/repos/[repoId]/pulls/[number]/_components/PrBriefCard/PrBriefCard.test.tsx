@@ -11,7 +11,16 @@ vi.mock("@/lib/hooks/reviews", () => ({ usePrReviews: vi.fn(), usePrRuns: vi.fn(
 import { useBrief, useGenerateBrief } from "@/lib/hooks";
 import { usePrReviews, usePrRuns } from "@/lib/hooks/reviews";
 
+// The brief's file links deep-link INTO the diff tab via client-side router.push;
+// stub next/navigation so we can assert the target URL and supply route params.
+const nav = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: nav.push }),
+  useParams: () => ({ repoId: "r1", number: "7" }),
+}));
+
 afterEach(cleanup);
+afterEach(() => nav.push.mockClear());
 
 const BRIEF: Brief = {
   what: "Adds rate limiting to the public API.",
@@ -109,7 +118,7 @@ function setReviewHooks(reviews: ReviewRecord[] = [], runs: RunSummary[] = []) {
 function renderCard(props: Partial<React.ComponentProps<typeof PrBriefCard>> = {}) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ brief: messages }}>
-      <PrBriefCard prId="pr-1" repoFullName="acme/payments-api" headSha="abc123" {...props} />
+      <PrBriefCard prId="pr-1" {...props} />
     </NextIntlClientProvider>,
   );
 }
@@ -149,7 +158,7 @@ describe("PrBriefCard", () => {
     }
   });
 
-  it("shows review-focus rows as path:line + reason + a GitHub blob link from head_sha (AC-12)", () => {
+  it("shows review-focus rows as path:line + reason, deep-linking INTO the diff tab (internal nav, not GitHub)", () => {
     setBriefHook({ data: BRIEF, isPending: false });
     setGenerateHook();
     setReviewHooks();
@@ -159,12 +168,24 @@ describe("PrBriefCard", () => {
     expect(
       screen.getByText("Core limiter logic — verify the key derivation."),
     ).toBeInTheDocument();
-    const link = screen.getByText("src/lib/rate.ts:42").closest("a");
-    expect(link).toHaveAttribute(
-      "href",
-      "https://github.com/acme/payments-api/blob/abc123/src/lib/rate.ts#L42",
-    );
-    expect(link).toHaveAttribute("target", "_blank");
+
+    // The focus link is an in-app control (no external <a href>) that pushes to
+    // the Smart Changes diff tab focused on the file.
+    const link = screen.getByRole("button", { name: "src/lib/rate.ts:42" });
+    fireEvent.click(link);
+    expect(nav.push).toHaveBeenCalledWith("/repos/r1/pulls/7?tab=diff&file=src%2Flib%2Frate.ts");
+  });
+
+  it("deep-links a Risk area's file reference into the diff tab too", () => {
+    setBriefHook({ data: BRIEF, isPending: false });
+    setGenerateHook();
+    setReviewHooks();
+    renderCard();
+
+    // The one risk's file_ref renders as its own in-app link.
+    const ref = screen.getByRole("button", { name: "src/lib/rate.ts" });
+    fireEvent.click(ref);
+    expect(nav.push).toHaveBeenCalledWith("/repos/r1/pulls/7?tab=diff&file=src%2Flib%2Frate.ts");
   });
 
   it("composes the top row (verdict/score/cost/findings) from review data, not the brief (AC-13)", () => {
@@ -198,10 +219,11 @@ describe("PrBriefCard", () => {
     fireEvent.click(regen);
     expect(mutate).toHaveBeenCalledTimes(1);
 
-    // Links carry an accessible name (their text content), satisfying the
-    // "links are labeled" i18n requirement.
-    const link = screen.getByText("src/lib/rate.ts:42").closest("a");
-    expect(link).toHaveAccessibleName("src/lib/rate.ts:42");
+    // Controls carry an accessible name (their text content), satisfying the
+    // "links/controls are labeled" i18n requirement.
+    expect(screen.getByRole("button", { name: "src/lib/rate.ts:42" })).toHaveAccessibleName(
+      "src/lib/rate.ts:42",
+    );
   });
 
   it("shows an explicit error state when the brief query itself fails, with NO Generate button (review fix #5)", () => {

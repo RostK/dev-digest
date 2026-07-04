@@ -68,6 +68,35 @@ export const s = {
     marginBottom: 6,
   } satisfies CSSProperties,
 
+  // ---- three-section split: Summary · Risk areas · Review focus ----
+  /** Summary block (what / why / risk level). Sits directly under the top row. */
+  section: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  } satisfies CSSProperties,
+
+  /** Risk-areas / Review-focus blocks — separated from the block above by a rule
+   *  so the card reads as three distinct sections rather than one flat list. */
+  sectionDivided: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    paddingTop: 14,
+    borderTop: "1px solid var(--border)",
+  } satisfies CSSProperties,
+
+  /** Section title for the Risk-areas / Review-focus blocks (stronger than the
+   *  muted sub-labels used inside the summary block). */
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+    color: "var(--text-secondary)",
+    marginBottom: 2,
+  } satisfies CSSProperties,
+
   // ---- risks list ----
   riskItem: {
     display: "flex",
@@ -93,6 +122,14 @@ export const s = {
     fontSize: 12.5,
     color: "var(--text-secondary)",
     lineHeight: 1.5,
+  } satisfies CSSProperties,
+
+  // ---- risk file references: deep-links into the Smart Changes diff tab ----
+  riskRefs: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 2,
   } satisfies CSSProperties,
 
   // ---- review focus rows: path:line + reason + blob link ----

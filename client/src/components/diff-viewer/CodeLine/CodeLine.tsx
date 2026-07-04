@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
 import { s, lineRowFor, lineSignFor } from "../styles";
+import { DIFF_SCROLL_MARGIN_TOP } from "../helpers";
 import { CommentThreadView } from "../CommentThreadView";
 import { InlineComposer } from "../InlineComposer";
 import { InlineFinding } from "../InlineFinding";
@@ -122,7 +123,12 @@ export function CodeLine({
   return (
     <div
       id={anchorId}
-      style={{ ...cs.rowWrap, ...highlightStyle }}
+      style={{
+        ...cs.rowWrap,
+        ...highlightStyle,
+        // Clear the sticky PR header when this line is a scroll-to target.
+        ...(anchorId ? { scrollMarginTop: DIFF_SCROLL_MARGIN_TOP } : {}),
+      }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >

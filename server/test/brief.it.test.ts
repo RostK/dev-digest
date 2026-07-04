@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import type { BlastRadius, Brief, LLMProvider } from '@devdigest/shared';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
@@ -145,6 +146,33 @@ d('Brief module (DB-backed)', () => {
     expect((getRes.json() as Brief).what).toBe(MODEL_FIXTURE.what);
     // The cache read must not have spent another model call.
     expect(llm.calls.filter((c) => c.method === 'completeStructured')).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('stamps head_sha on generate and HIDES the cached brief once the PR head advances (staleness)', async () => {
+    const llm = new MockLLMProvider('openai', { structuredBySchema: { BriefProposal: MODEL_FIXTURE } });
+    const { app, prId } = await setup({ name: 'demo-stale', llm });
+
+    const postRes = await app.inject({ method: 'POST', url: `/pulls/${prId}/brief` });
+    const { brief } = postRes.json() as { brief: Brief };
+    // Generation pins the brief to the PR's head SHA at that moment (from setup()).
+    expect(brief.head_sha).toBe('deadbeef');
+
+    // Head unchanged → the cache still serves the brief.
+    const fresh = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect((fresh.json() as Brief | null)?.what).toBe(MODEL_FIXTURE.what);
+
+    // A new commit advances the PR head → the persisted brief no longer matches
+    // → GET treats it as stale and returns null (UI falls back to Generate).
+    await pg.handle.db
+      .update(t.pullRequests)
+      .set({ headSha: 'cafef00dcafef00d' })
+      .where(eq(t.pullRequests.id, prId));
+
+    const stale = await app.inject({ method: 'GET', url: `/pulls/${prId}/brief` });
+    expect(stale.statusCode).toBe(200);
+    expect(stale.json()).toBeNull();
 
     await app.close();
   });
