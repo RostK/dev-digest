@@ -1,0 +1,86 @@
+{
+  "turnIntoEvalCase": "Turn into eval case",
+  "global": {
+    "title": "Eval Dashboard",
+    "subtitle": "Recall / Precision / Citation across every agent's gold set",
+    "summaryHeading": "Agents",
+    "recentRunsHeading": "Recent runs",
+    "colAgent": "Agent",
+    "colVersion": "Version",
+    "colRecall": "Recall",
+    "colPrecision": "Precision",
+    "colCitation": "Citation",
+    "colRuns": "Runs",
+    "colRanAt": "Ran at",
+    "colCost": "Cost",
+    "viewAgent": "View →",
+    "empty": {
+      "title": "No eval runs yet",
+      "body": "Add eval cases to an agent and run its eval set to see recall, precision, and citation trends here."
+    },
+    "error": "Couldn't load the eval dashboard.",
+    "loading": "Loading eval dashboard…"
+  },
+  "agentDashboard": {
+    "backToGlobal": "← All agents",
+    "title": "Eval dashboard",
+    "trendHeading": "Metric trend",
+    "recentRunsHeading": "Recent runs",
+    "casesSummary": "{count, plural, one {# eval case} other {# eval cases}}",
+    "legend": {
+      "recall": "Recall",
+      "precision": "Precision",
+      "citation": "Citation"
+    },
+    "colRanAt": "Ran at",
+    "colVersion": "Version",
+    "colRecall": "Recall",
+    "colPrecision": "Precision",
+    "colCitation": "Citation",
+    "colPass": "Pass",
+    "colCost": "Cost",
+    "colCompare": "Compare",
+    "selectToCompare": "Select two runs to compare",
+    "compareSelected": "Compare selected ({count}/2)",
+    "empty": {
+      "title": "No eval runs yet",
+      "body": "Run this agent's eval set to start tracking recall, precision, and citation accuracy over time."
+    },
+    "error": "Couldn't load this agent's eval dashboard.",
+    "loading": "Loading eval dashboard…",
+    "alert": "Alert"
+  },
+  "compare": {
+    "title": "Compare eval runs",
+    "subtitle": "Run {a} vs run {b}",
+    "recall": "Recall",
+    "precision": "Precision",
+    "citation": "Citation accuracy",
+    "cost": "Cost",
+    "agentVersion": "Agent version",
+    "ranAt": "Ran at",
+    "systemPrompt": "System prompt",
+    "noChange": "No change",
+    "improved": "Improved",
+    "regressed": "Regressed",
+    "close": "Close",
+    "error": "Couldn't load this comparison.",
+    "loading": "Loading comparison…"
+  },
+  "evalsTab": {
+    "title": "Evals",
+    "runAll": "Run all",
+    "running": "Running…",
+    "newCase": "New case",
+    "empty": "No cases yet. Add eval cases so this agent's changes can be measured.",
+    "minCasesHint": "Add at least 8 cases for a reliable signal ({count}/8)",
+    "viewDashboard": "View full dashboard →",
+    "colCase": "Case",
+    "colStatus": "Status",
+    "colExpected": "Expected",
+    "colActual": "Actual",
+    "statusPass": "Pass",
+    "statusFail": "Fail",
+    "statusNeverRun": "Never run"
+  }
+}
