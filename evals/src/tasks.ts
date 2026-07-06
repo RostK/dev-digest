@@ -44,12 +44,18 @@ export function agentTask(prompt: string, agentName: string, opts: RunOptions = 
  * Use for workflow-level evals: skill activation, subagent dispatch, CLAUDE.md effect.
  * Ignores EVAL_CONFIG — the workflow tier has its own control-vs-treatment design.
  *
+ * Hooks are disabled by default (see disableHooks on RunOptions) — this repo's own Stop hook
+ * (engineering-insights capture) otherwise fires at the end of EVERY session regardless of the
+ * task, spending part of maxTurns on an unrelated tangent. A case that specifically wants to
+ * assert the real hook's effect can override with `{ disableHooks: false }`.
+ *
  * Safety: keep allowedTools a read-only allow-list (no Bash/Write/Edit) — a fresh session
  * with bypassPermissions could otherwise take real actions in the repo.
  */
 export function workflowTask(prompt: string, opts: RunOptions = {}) {
   return runClaude(prompt, {
     allowedTools: WORKFLOW_ALLOWED_TOOLS,
+    disableHooks: true,
     ...opts,
     settingSources: ["project"],
   });

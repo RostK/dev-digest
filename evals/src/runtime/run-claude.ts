@@ -37,6 +37,15 @@ export interface RunOptions {
   /** ["project"] loads on-disk CLAUDE.md + skills/agents; default [] keeps the run isolated. */
   settingSources?: Array<"user" | "project" | "local">;
   /**
+   * Suppress every hook (Stop/PreToolUse/etc.) from user/project/local settings for this session.
+   * workflowTask sets this by default: settingSources:["project"] loads CLAUDE.md + skills/agents
+   * to test THAT routing, but the repo's own hooks (e.g. the engineering-insights Stop hook) are
+   * an unrelated confound — they fire on every session regardless of the task and can burn the
+   * remaining maxTurns budget on an unrelated "capture insights" tangent instead of the thing the
+   * case is actually asserting.
+   */
+  disableHooks?: boolean;
+  /**
    * Early-stop hook. Called after every tool_use with the trace collected SO FAR; return true to
    * end the session immediately. Lets a dispatch/trace case stop the moment its evidence is in
    * (e.g. the subagent was launched) instead of waiting for a heavy nested subagent to finish.
@@ -62,12 +71,22 @@ export async function runClaude(prompt: string, opts: RunOptions = {}): Promise<
   const options: Options = {
     model: opts.model ?? EVAL_MODEL,
     maxTurns: opts.maxTurns ?? MAX_TURNS,
-    permissionMode: "bypassPermissions", // safe: evals only read/plan and tools are allow-listed
+    // permissionMode: "bypassPermissions" means nothing ever prompts, so allowedTools alone does
+    // NOT restrict what the model can call — it only controls auto-approval. `tools` is the field
+    // that actually restricts availability (confirmed the hard way: a workflowTask "write-spec"
+    // case dispatched spec-author, which really wrote specs/notifications/SPEC-05-*.md and
+    // registered it in specs/INDEX.md, because Write/Edit were available despite being absent from
+    // allowedTools). Restricting `tools` to the same list is what makes bypassPermissions actually
+    // safe for a read-only allow-list.
+    permissionMode: "bypassPermissions",
     systemPrompt,
     allowedTools,
+    tools: allowedTools,
     cwd: opts.cwd ?? REPO_ROOT,
     // Default: do NOT load on-disk config — isolates the injected artifact. workflowTask overrides.
     settingSources: opts.settingSources ?? [],
+    // "flag settings" — highest-priority layer, applied on top of whatever settingSources loaded.
+    ...(opts.disableHooks ? { settings: { disableAllHooks: true } } : {}),
     env: subscriptionEnv(),
   };
 

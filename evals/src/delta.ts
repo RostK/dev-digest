@@ -63,11 +63,24 @@ function main(): void {
   console.log(`A = ${labelA}  sha ${a.git_sha}${a.dirty ? "-dirty" : ""}  (${a.times} runs)`);
   console.log(`B = ${labelB}  sha ${b.git_sha}${b.dirty ? "-dirty" : ""}  (${b.times} runs)`);
 
-  const nodeids = [...new Set([...Object.keys(a.tests), ...Object.keys(b.tests)])].sort();
-  for (const id of nodeids) {
-    const ta = a.tests[id];
-    const tb = b.tests[id];
-    const shortId = id.split(" > ").slice(-1)[0];
+  // Join on the test's short name (last " > " segment), not the full nodeid — the full nodeid
+  // includes the describe group (agent:architecture-reviewer vs agent:architecture-reviewer-lite),
+  // so an agent-vs-agent-lite A/B that reuses the same cases file would otherwise never match up:
+  // every row would show as "only in A" / "only in B" instead of a real before/after delta.
+  const shortIdOf = (id: string) => id.split(" > ").slice(-1)[0];
+  const shortIds = [
+    ...new Set([...Object.keys(a.tests).map(shortIdOf), ...Object.keys(b.tests).map(shortIdOf)]),
+  ].sort();
+  const byShortId = (tests: Record<string, NodeAggregate>) => {
+    const out: Record<string, NodeAggregate> = {};
+    for (const [id, agg] of Object.entries(tests)) out[shortIdOf(id)] = agg;
+    return out;
+  };
+  const aByShort = byShortId(a.tests);
+  const bByShort = byShortId(b.tests);
+  for (const shortId of shortIds) {
+    const ta = aByShort[shortId];
+    const tb = bByShort[shortId];
     rateRow("\n  ", shortId, ta?.pass, tb?.pass);
 
     const practiceTexts = [...new Set([...Object.keys(ta?.practices ?? {}), ...Object.keys(tb?.practices ?? {})])];
