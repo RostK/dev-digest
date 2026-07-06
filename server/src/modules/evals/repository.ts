@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { EvalExpectation } from '@devdigest/shared';
@@ -56,6 +56,40 @@ export interface FindingContext {
   prId: string;
 }
 
+/**
+ * Aggregate metrics for one run-group (T4 read side) — the SQL-computed
+ * counterpart of `scoring.ts`'s `aggregateRun`, but over ALREADY-PERSISTED
+ * per-case `eval_runs` rows (recall/precision/citation_accuracy were computed
+ * once by `scoreCase` at run time and stored per row), so the read path never
+ * re-derives them from raw kept/dropped counts. `recall`/`precision`/
+ * `citation_accuracy` average the non-null values across the group's rows —
+ * Postgres `avg()` ignores NULLs, matching `aggregateRun`'s own
+ * null-exclusion for `recall_case`. Returns `undefined` if the group has no
+ * rows in this workspace (never-run / cross-tenant group id).
+ */
+export interface GroupAggregate {
+  groupId: string;
+  agentVersion: number;
+  systemPrompt: string;
+  ranAt: string;
+  recall: number;
+  precision: number;
+  citationAccuracy: number;
+  tracesPassed: number;
+  tracesTotal: number;
+  costUsd: number | null;
+}
+
+/** One agent's rollup row for the global dashboard's summary table. */
+export interface AgentSummaryRow {
+  agentId: string;
+  agentVersion: number;
+  recall: number;
+  precision: number;
+  citationAccuracy: number;
+  runCount: number;
+}
+
 export class EvalRepository {
   constructor(private db: Db) {}
 
@@ -110,6 +144,29 @@ export class EvalRepository {
     return this.listCasesForAgent(workspaceId, agentId);
   }
 
+  /**
+   * The latest `eval_runs` row per case, for every case owned by an agent —
+   * the state the case-list UI needs (`last_run_pass`/`actual_count`).
+   * Resolved with `DISTINCT ON (case_id)` ordered by `ran_at DESC`, NOT
+   * fetch-all-runs-then-dedup-in-JS (server/INSIGHTS.md:36). A case with no
+   * runs yet simply has no entry in the returned map.
+   */
+  async latestRunPerCase(workspaceId: string, agentId: string): Promise<Map<string, EvalRunRow>> {
+    const rows = await this.db
+      .selectDistinctOn([t.evalRuns.caseId], { run: t.evalRuns })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(
+        and(
+          eq(t.evalCases.workspaceId, workspaceId),
+          eq(t.evalCases.ownerKind, 'agent'),
+          eq(t.evalCases.ownerId, agentId),
+        ),
+      )
+      .orderBy(t.evalRuns.caseId, desc(t.evalRuns.ranAt));
+    return new Map(rows.map((r) => [r.run.caseId, r.run]));
+  }
+
   // ---- eval_runs -------------------------------------------------------------
 
   async insertRun(values: InsertEvalRun): Promise<EvalRunRow> {
@@ -162,6 +219,153 @@ export class EvalRepository {
       .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalRuns.groupId, groupId)))
       .orderBy(desc(t.evalRuns.ranAt));
     return rows.map((r) => r.run);
+  }
+
+  /**
+   * Every DISTINCT run-group id for an agent, most-recent first — the
+   * grouping key for `GET /agents/:id/eval-runs` (aggregated run history).
+   * `groupId` is NOT a real FK (a value object, not a row — see the schema
+   * comment on `eval_runs.group_id`), so this reduces the raw per-case rows
+   * to one entry per group via `GROUP BY`, ordering by each group's own
+   * latest `ran_at` (a case's row is not necessarily written in group order
+   * within a batch, but the whole group shares one wall-clock window).
+   */
+  async listGroupIdsForAgent(workspaceId: string, agentId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ groupId: t.evalRuns.groupId, latest: sql<Date>`max(${t.evalRuns.ranAt})` })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(
+        and(
+          eq(t.evalCases.workspaceId, workspaceId),
+          eq(t.evalCases.ownerKind, 'agent'),
+          eq(t.evalCases.ownerId, agentId),
+          sql`${t.evalRuns.groupId} is not null`,
+        ),
+      )
+      .groupBy(t.evalRuns.groupId)
+      .orderBy(sql`max(${t.evalRuns.ranAt}) desc`);
+    return rows.map((r) => r.groupId).filter((id): id is string => id !== null);
+  }
+
+  /**
+   * Aggregate one run-group's metrics (T4). `workspace_id`-scoped via the
+   * join through `eval_cases` — a group id from another tenant resolves to
+   * `undefined`, never leaking cross-tenant aggregates.
+   */
+  async getGroupAggregate(workspaceId: string, groupId: string): Promise<GroupAggregate | undefined> {
+    const [row] = await this.db
+      .select({
+        agentVersion: sql<number>`max(${t.evalRuns.agentVersion})`,
+        systemPrompt: sql<string>`max(${t.evalRuns.systemPrompt})`,
+        ranAt: sql<Date>`max(${t.evalRuns.ranAt})`,
+        recall: sql<number | null>`avg(${t.evalRuns.recall})`,
+        precision: sql<number | null>`avg(${t.evalRuns.precision})`,
+        citationAccuracy: sql<number | null>`avg(${t.evalRuns.citationAccuracy})`,
+        tracesPassed: sql<number>`count(*) filter (where ${t.evalRuns.pass} is true)`.mapWith(Number),
+        tracesTotal: sql<number>`count(*)`.mapWith(Number),
+        costUsd: sql<number | null>`sum(${t.evalRuns.costUsd})`,
+      })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalRuns.groupId, groupId)));
+
+    if (!row || row.tracesTotal === 0) return undefined;
+    return {
+      groupId,
+      agentVersion: row.agentVersion,
+      systemPrompt: row.systemPrompt,
+      ranAt: new Date(row.ranAt).toISOString(),
+      recall: row.recall ?? 1,
+      precision: row.precision ?? 1,
+      citationAccuracy: row.citationAccuracy ?? 1,
+      tracesPassed: row.tracesPassed,
+      tracesTotal: row.tracesTotal,
+      costUsd: row.costUsd,
+    };
+  }
+
+  /**
+   * The LATEST run-group per agent across the whole workspace (global
+   * dashboard `recent_runs` + the per-agent summary rollup's "current"
+   * snapshot) — resolved with `DISTINCT ON` in Postgres, NOT fetch-every-run-
+   * then-dedup-in-JS (server/INSIGHTS.md:36). Ordered by each agent's own
+   * latest run timestamp, most-recent first.
+   */
+  async latestGroupPerAgent(workspaceId: string): Promise<GroupAggregate[]> {
+    // One row per (case, its run) first, tagged with the owning agent id —
+    // then DISTINCT ON (owner_id, group_id) collapses to one row per group,
+    // and a second pass picks the latest group per agent.
+    const perGroup = this.db
+      .selectDistinctOn([t.evalCases.ownerId, t.evalRuns.groupId], {
+        agentId: t.evalCases.ownerId,
+        groupId: t.evalRuns.groupId,
+        ranAt: t.evalRuns.ranAt,
+      })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(
+        and(
+          eq(t.evalCases.workspaceId, workspaceId),
+          eq(t.evalCases.ownerKind, 'agent'),
+          sql`${t.evalRuns.groupId} is not null`,
+        ),
+      )
+      .orderBy(t.evalCases.ownerId, t.evalRuns.groupId, desc(t.evalRuns.ranAt))
+      .as('per_group');
+
+    const latestPerAgent = this.db
+      .selectDistinctOn([perGroup.agentId], {
+        agentId: perGroup.agentId,
+        groupId: perGroup.groupId,
+      })
+      .from(perGroup)
+      .orderBy(perGroup.agentId, desc(perGroup.ranAt))
+      .as('latest_per_agent');
+
+    const rows = await this.db
+      .select({ groupId: latestPerAgent.groupId })
+      .from(latestPerAgent)
+      .orderBy(desc(latestPerAgent.groupId));
+
+    const groupIds = rows.map((r) => r.groupId).filter((id): id is string => id !== null);
+    const aggregates = await Promise.all(
+      groupIds.map((id) => this.getGroupAggregate(workspaceId, id)),
+    );
+    return aggregates
+      .filter((a): a is GroupAggregate => a !== undefined)
+      .sort((a, b) => new Date(b.ranAt).getTime() - new Date(a.ranAt).getTime());
+  }
+
+  /**
+   * Per-agent rollup for the global dashboard's summary table: latest
+   * agent_version + pooled recall/precision/citation_accuracy across ALL of
+   * that agent's runs (not just the latest group) + a run_count. Workspace-
+   * scoped via the join through `eval_cases`.
+   */
+  async agentSummaryRows(workspaceId: string): Promise<AgentSummaryRow[]> {
+    const rows = await this.db
+      .select({
+        agentId: t.evalCases.ownerId,
+        agentVersion: sql<number>`max(${t.evalRuns.agentVersion})`,
+        recall: sql<number | null>`avg(${t.evalRuns.recall})`,
+        precision: sql<number | null>`avg(${t.evalRuns.precision})`,
+        citationAccuracy: sql<number | null>`avg(${t.evalRuns.citationAccuracy})`,
+        runCount: sql<number>`count(distinct ${t.evalRuns.groupId})`.mapWith(Number),
+      })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalCases.ownerKind, 'agent')))
+      .groupBy(t.evalCases.ownerId);
+
+    return rows.map((r) => ({
+      agentId: r.agentId,
+      agentVersion: r.agentVersion,
+      recall: r.recall ?? 1,
+      precision: r.precision ?? 1,
+      citationAccuracy: r.citationAccuracy ?? 1,
+      runCount: r.runCount,
+    }));
   }
 
   // ---- cross-module reads (own workspace-scoped SQL; no sibling repo import) --

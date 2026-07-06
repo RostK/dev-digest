@@ -308,6 +308,158 @@ d('evals module (Testcontainers pg)', () => {
     }
   });
 
+  // ---- T4 — AC-10 dashboard, AC-11 compare, AC-18 global read --------------
+
+  it('AC-10: the dashboard reflects metrics after 2 runs (current + delta + trend + recent_runs), ' +
+    'and the read path makes ZERO container.llm calls', async () => {
+    const mockLlm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });
+    const container = new Container(config(), pg.handle.db, { llm: { openai: mockLlm } });
+    const service = new EvalService(container);
+    const { agent } = await seedRepoPrAndReview();
+
+    const repo = new EvalRepository(pg.handle.db);
+    await repo.createCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      name: 'dashboard case',
+      inputDiff: `diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n${PATCH}`,
+      expectedOutput: {
+        kind: 'must_find',
+        findings: [{ file: 'src/config.ts', start_line: 11, end_line: 11 }],
+      },
+    });
+
+    // Run 1 — the model finds it (good run).
+    await service.runSet(workspaceId, agent.id);
+
+    // Run 2 — a "broken prompt" run that misses the finding entirely
+    // (recall/precision regress), so the dashboard has a real delta to show.
+    const brokenLlm = new MockLLMProvider('openai', {
+      structured: { verdict: 'approve', summary: 'Looks fine.', score: 100, findings: [] },
+    });
+    const brokenContainer = new Container(config(), pg.handle.db, { llm: { openai: brokenLlm } });
+    const brokenService = new EvalService(brokenContainer);
+    await brokenService.runSet(workspaceId, agent.id);
+
+    // Zero-LLM guard on the READ path: spy on the read-side container's own
+    // llm resolver — dashboardForAgent must never call it.
+    const readContainer = new Container(config(), pg.handle.db, {});
+    let llmCalls = 0;
+    const originalLlm = readContainer.llm.bind(readContainer);
+    readContainer.llm = (async (...args: Parameters<typeof originalLlm>) => {
+      llmCalls++;
+      return originalLlm(...args);
+    }) as typeof readContainer.llm;
+    const readService = new EvalService(readContainer);
+
+    const dashboard = await readService.dashboardForAgent(workspaceId, agent.id);
+
+    expect(llmCalls).toBe(0);
+    expect(dashboard.owner_kind).toBe('agent');
+    expect(dashboard.owner_id).toBe(agent.id);
+    expect(dashboard.cases_total).toBe(1);
+    // Latest run (broken) found nothing → current recall/precision reflect that.
+    expect(dashboard.current.recall).toBe(0);
+    // Delta vs the prior (good) run is negative (a regression).
+    expect(dashboard.delta.recall).toBeLessThan(0);
+    expect(dashboard.trend.length).toBe(2);
+    expect(dashboard.recent_runs.length).toBeGreaterThan(0);
+    // A recall drop > the alert threshold should surface a warning.
+    expect(dashboard.alert).toMatch(/recall/i);
+  });
+
+  it('AC-11: compare returns both group aggregates + per-metric deltas + BOTH agent_version ' +
+    'and BOTH system_prompt snapshots', async () => {
+    const goodLlm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });
+    const goodContainer = new Container(config(), pg.handle.db, { llm: { openai: goodLlm } });
+    const goodService = new EvalService(goodContainer);
+    const { agent } = await seedRepoPrAndReview();
+
+    const repo = new EvalRepository(pg.handle.db);
+    await repo.createCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      name: 'compare case',
+      inputDiff: `diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n${PATCH}`,
+      expectedOutput: {
+        kind: 'must_find',
+        findings: [{ file: 'src/config.ts', start_line: 11, end_line: 11 }],
+      },
+    });
+
+    const runA = await goodService.runSet(workspaceId, agent.id);
+
+    // Bump the agent's system prompt (version bump) before the second run, so
+    // the two groups carry genuinely different agent_version + system_prompt
+    // snapshots.
+    await goodContainer.agentsRepo.update(workspaceId, agent.id, {
+      systemPrompt: 'You are a STRICTER reviewer. Flag every secret.',
+    });
+
+    const brokenLlm = new MockLLMProvider('openai', {
+      structured: { verdict: 'approve', summary: 'Looks fine.', score: 100, findings: [] },
+    });
+    const brokenContainer = new Container(config(), pg.handle.db, { llm: { openai: brokenLlm } });
+    const brokenService = new EvalService(brokenContainer);
+    const runB = await brokenService.runSet(workspaceId, agent.id);
+
+    const compareService = new EvalService(new Container(config(), pg.handle.db, {}));
+    const compare = await compareService.compareGroups(workspaceId, runA.group_id, runB.group_id);
+
+    expect(compare.a.group_id).toBe(runA.group_id);
+    expect(compare.b.group_id).toBe(runB.group_id);
+    expect(compare.a.agent_version).toBe(runA.agent_version);
+    expect(compare.b.agent_version).toBe(runB.agent_version);
+    expect(compare.b.agent_version).toBeGreaterThan(compare.a.agent_version);
+    expect(compare.delta.recall).toBeLessThan(0);
+    expect(compare.a_system_prompt).toBe(agent.systemPrompt);
+    expect(compare.b_system_prompt).toBe('You are a STRICTER reviewer. Flag every secret.');
+    expect(compare.a_system_prompt).not.toBe(compare.b_system_prompt);
+  });
+
+  it('AC-18: the global dashboard reads recent runs + a per-agent summary rollup ' +
+    'across every agent, with ZERO container.llm calls', async () => {
+    const mockLlm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });
+    const container2 = new Container(config(), pg.handle.db, { llm: { openai: mockLlm } });
+    const service = new EvalService(container2);
+    const { agent } = await seedRepoPrAndReview();
+
+    const repo = new EvalRepository(pg.handle.db);
+    await repo.createCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      name: 'global case',
+      inputDiff: `diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n${PATCH}`,
+      expectedOutput: {
+        kind: 'must_find',
+        findings: [{ file: 'src/config.ts', start_line: 11, end_line: 11 }],
+      },
+    });
+    await service.runSet(workspaceId, agent.id);
+
+    const readContainer = new Container(config(), pg.handle.db, {});
+    let llmCalls = 0;
+    const originalLlm = readContainer.llm.bind(readContainer);
+    readContainer.llm = (async (...args: Parameters<typeof originalLlm>) => {
+      llmCalls++;
+      return originalLlm(...args);
+    }) as typeof readContainer.llm;
+    const readService = new EvalService(readContainer);
+
+    const global = await readService.globalDashboard(workspaceId);
+
+    expect(llmCalls).toBe(0);
+    expect(global.recent_runs.length).toBeGreaterThan(0);
+    expect(global.recent_runs.some((r) => r.agent_version === agent.version)).toBe(true);
+    const row = global.summary_rows.find((r) => r.agent_id === agent.id);
+    expect(row).toBeDefined();
+    expect(row?.agent_name).toBe(agent.name);
+    expect(row?.run_count).toBeGreaterThanOrEqual(1);
+  });
+
   it('cross-tenant: createCaseFromFinding 404s when the finding is in a different workspace', async () => {
     const container = makeContainer();
     const service = new EvalService(container);
