@@ -1,0 +1,85 @@
+{
+  "_fixture_note": "Hand-authored, FAITHFUL ReviewOutcome captures (SPEC-05 T5) — not a live LLM recording. Grounded in the real ReviewOutcome shape returned by reviewer-core's reviewPullRequest (src/review/run.ts). Simulates a DEGRADED/broken system prompt (e.g. a stripped-down or misdirected instruction) reviewing the SAME two cases as good-prompt.outcome.json: it misses the path-traversal finding entirely (must_find case) and flags the safe, already-sanitized constant as a false positive (must_not_flag case). Synthetic diff/content only; no secrets or proprietary code.",
+  "must_find": {
+    "review": {
+      "verdict": "comment",
+      "summary": "Minor style nit on the assets root constant; no other issues found.",
+      "score": 88,
+      "findings": [
+        {
+          "id": "broken-1",
+          "severity": "SUGGESTION",
+          "category": "style",
+          "title": "Consider making the assets root configurable via environment variable",
+          "file": "src/routes/files.ts",
+          "start_line": 5,
+          "end_line": 5,
+          "rationale": "The static `ASSETS_ROOT` constant is hardcoded; making it configurable would improve flexibility across environments.",
+          "suggestion": "Read `ASSETS_ROOT` from config/env instead of a literal.",
+          "confidence": 0.6,
+          "kind": "finding"
+        }
+      ]
+    },
+    "grounding": "1/1",
+    "dropped": [],
+    "mode": "single-pass",
+    "assembly": {
+      "system": "You are a reviewer. Point out style issues in the diff.",
+      "skills": null,
+      "memory": null,
+      "specs": null,
+      "callers": null,
+      "repo_map": null,
+      "pr_description": "Adds a small endpoint to serve a named static asset from disk.",
+      "intent": null,
+      "user": "## Diff\n<diff redacted for fixture brevity — see case set in scoring-fixtures.test.ts>"
+    },
+    "chunks": [{ "label": "all files" }],
+    "tokensIn": 812,
+    "tokensOut": 94,
+    "costUsd": 0.0026,
+    "raw": "{\"verdict\":\"comment\",\"summary\":\"Minor style nit on the assets root constant; no other issues found.\",\"score\":88,\"findings\":[{\"id\":\"broken-1\",\"severity\":\"SUGGESTION\",\"category\":\"style\",\"title\":\"Consider making the assets root configurable via environment variable\",\"file\":\"src/routes/files.ts\",\"start_line\":5,\"end_line\":5,\"rationale\":\"The static ASSETS_ROOT constant is hardcoded; making it configurable would improve flexibility across environments.\",\"suggestion\":\"Read ASSETS_ROOT from config/env instead of a literal.\",\"confidence\":0.6,\"kind\":\"finding\"}]}"
+  },
+  "must_not_flag": {
+    "review": {
+      "verdict": "comment",
+      "summary": "Flagged the hardcoded assets root constant as a maintainability concern.",
+      "score": 88,
+      "findings": [
+        {
+          "id": "broken-2",
+          "severity": "SUGGESTION",
+          "category": "style",
+          "title": "Consider making the assets root configurable via environment variable",
+          "file": "src/routes/files.ts",
+          "start_line": 5,
+          "end_line": 5,
+          "rationale": "The static `ASSETS_ROOT` constant is hardcoded; making it configurable would improve flexibility across environments.",
+          "suggestion": "Read `ASSETS_ROOT` from config/env instead of a literal.",
+          "confidence": 0.6,
+          "kind": "finding"
+        }
+      ]
+    },
+    "grounding": "1/1",
+    "dropped": [],
+    "mode": "single-pass",
+    "assembly": {
+      "system": "You are a reviewer. Point out style issues in the diff.",
+      "skills": null,
+      "memory": null,
+      "specs": null,
+      "callers": null,
+      "repo_map": null,
+      "pr_description": "Adds a small endpoint to serve a named static asset from disk.",
+      "intent": null,
+      "user": "## Diff\n<diff redacted for fixture brevity — see case set in scoring-fixtures.test.ts>"
+    },
+    "chunks": [{ "label": "all files" }],
+    "tokensIn": 640,
+    "tokensOut": 47,
+    "costUsd": 0.0017,
+    "raw": "{\"verdict\":\"comment\",\"summary\":\"Flagged the hardcoded assets root constant as a maintainability concern.\",\"score\":88,\"findings\":[{\"id\":\"broken-2\",\"severity\":\"SUGGESTION\",\"category\":\"style\",\"title\":\"Consider making the assets root configurable via environment variable\",\"file\":\"src/routes/files.ts\",\"start_line\":5,\"end_line\":5,\"rationale\":\"The static ASSETS_ROOT constant is hardcoded; making it configurable would improve flexibility across environments.\",\"suggestion\":\"Read ASSETS_ROOT from config/env instead of a literal.\",\"confidence\":0.6,\"kind\":\"finding\"}]}"
+  }
+}

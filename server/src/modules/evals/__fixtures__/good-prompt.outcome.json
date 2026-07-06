@@ -1,0 +1,71 @@
+{
+  "_fixture_note": "Hand-authored, FAITHFUL ReviewOutcome captures (SPEC-05 T5) — not a live LLM recording. Grounded in the real ReviewOutcome shape returned by reviewer-core's reviewPullRequest (src/review/run.ts). Synthetic diff/content only; no secrets or proprietary code. Two entries, one per eval case in scoring-fixtures.test.ts (each case in a real eval run drives its own reviewPullRequest call over its own fixed input_diff, per AC-4) — must_find is the path-traversal case, must_not_flag is the safe-constant case. Pairs with broken-prompt.outcome.json for the prompt-sensitivity check (AC-9).",
+  "must_find": {
+    "review": {
+      "verdict": "request_changes",
+      "summary": "Found a path-traversal vulnerability in the new file-serving handler.",
+      "score": 42,
+      "findings": [
+        {
+          "id": "good-1",
+          "severity": "CRITICAL",
+          "category": "security",
+          "title": "Unsanitized user input used to build a filesystem path (path traversal)",
+          "file": "src/routes/files.ts",
+          "start_line": 12,
+          "end_line": 14,
+          "rationale": "`req.query.name` is concatenated directly into a filesystem path passed to `fs.readFile` with no sanitization or containment check, allowing a `../../` payload to read arbitrary files outside the intended directory.",
+          "suggestion": "Resolve the path with `path.basename(name)` (or `path.resolve` + a prefix check against the assets root) before calling `fs.readFile`.",
+          "confidence": 0.93,
+          "kind": "finding"
+        }
+      ]
+    },
+    "grounding": "1/1",
+    "dropped": [],
+    "mode": "single-pass",
+    "assembly": {
+      "system": "You are a careful senior reviewer. Flag security, correctness, and quality issues in the diff.",
+      "skills": null,
+      "memory": null,
+      "specs": null,
+      "callers": null,
+      "repo_map": null,
+      "pr_description": "Adds a small endpoint to serve a named static asset from disk.",
+      "intent": null,
+      "user": "## Diff\n<diff redacted for fixture brevity — see case set in scoring-fixtures.test.ts>"
+    },
+    "chunks": [{ "label": "all files" }],
+    "tokensIn": 812,
+    "tokensOut": 176,
+    "costUsd": 0.0041,
+    "raw": "{\"verdict\":\"request_changes\",\"summary\":\"Found a path-traversal vulnerability in the new file-serving handler.\",\"score\":42,\"findings\":[{\"id\":\"good-1\",\"severity\":\"CRITICAL\",\"category\":\"security\",\"title\":\"Unsanitized user input used to build a filesystem path (path traversal)\",\"file\":\"src/routes/files.ts\",\"start_line\":12,\"end_line\":14,\"rationale\":\"req.query.name is concatenated directly into a filesystem path passed to fs.readFile with no sanitization or containment check.\",\"suggestion\":\"Resolve the path with path.basename(name) before calling fs.readFile.\",\"confidence\":0.93,\"kind\":\"finding\"}]}"
+  },
+  "must_not_flag": {
+    "review": {
+      "verdict": "approve",
+      "summary": "No issues found; the hardcoded assets-root constant is a normal, safe pattern.",
+      "score": 96,
+      "findings": []
+    },
+    "grounding": "0/0",
+    "dropped": [],
+    "mode": "single-pass",
+    "assembly": {
+      "system": "You are a careful senior reviewer. Flag security, correctness, and quality issues in the diff.",
+      "skills": null,
+      "memory": null,
+      "specs": null,
+      "callers": null,
+      "repo_map": null,
+      "pr_description": "Adds a small endpoint to serve a named static asset from disk.",
+      "intent": null,
+      "user": "## Diff\n<diff redacted for fixture brevity — see case set in scoring-fixtures.test.ts>"
+    },
+    "chunks": [{ "label": "all files" }],
+    "tokensIn": 640,
+    "tokensOut": 41,
+    "costUsd": 0.0016,
+    "raw": "{\"verdict\":\"approve\",\"summary\":\"No issues found; the hardcoded assets-root constant is a normal, safe pattern.\",\"score\":96,\"findings\":[]}"
+  }
+}
