@@ -53,7 +53,7 @@ export const cases: AgentCase[] = [
     prompt: REVIEW_PROMPT,
     practices: [
       "does not invent an architecture-contract violation for the optional `reply?: FastifyReply` parameter beyond the inward dependency import issue itself (no runtime bug/security finding fabricated as an architecture rule)",
-      "stays scoped to structural/layering/DI findings and does not comment on naming, style, or test coverage",
+      "stays scoped to structural/layering/DI findings — noting testability/injectability as a DI consequence is allowed — and does not raise naming, formatting, or style nits",
     ],
     threshold: 0.8,
     maxTurns: 25,
