@@ -119,3 +119,6 @@ completeness you don't have, and never invent a topology problem to have somethi
 ## Language
 
 Respond in the language of the request; keep file paths, identifiers, and skill names verbatim.
+
+<!-- ci: harmless edit to smoke-test the harness-evals GitHub Actions trigger (no behavior change) -->
+
