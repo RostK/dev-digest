@@ -81,6 +81,7 @@
     "colActual": "Actual",
     "statusPass": "Pass",
     "statusFail": "Fail",
-    "statusNeverRun": "Never run"
+    "statusNeverRun": "Never run",
+    "runSummary": "{passed}/{total} cases passed on the last run"
   }
 }
