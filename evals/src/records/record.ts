@@ -31,6 +31,15 @@ export interface RecordData {
   verdict?: Verdict;
   grounded?: number;
   threshold?: number;
+  /**
+   * Explicit test outcome for workflow cases (which have neither a grounding gate nor a judge
+   * verdict). Pass the SAME boolean the vitest assertion checks so the persisted `outcome` — what
+   * eval:repeat/eval:delta aggregate — matches the test result. Without it, workflow outcome falls
+   * back to `!isError`, which diverges from the assertion: a negative-activation case that
+   * correctly does NOT activate but hits maxTurns while exploring reads as `isError` → recorded as
+   * a failure even though the test passed.
+   */
+  passed?: boolean;
   extra?: Record<string, unknown>;
 }
 
@@ -40,18 +49,21 @@ export interface RecordData {
  * from being silently empty.
  */
 export function record(label: string, data: RecordData): void {
-  const { result, verdict, grounded, threshold, extra } = data;
+  const { result, verdict, grounded, threshold, passed, extra } = data;
   const state = expect.getState();
   const nodeid = `${state.testPath ?? "?"} > ${state.currentTestName ?? label}`;
 
-  // outcome: grounding gate failure short-circuits to false; else the judge threshold; else
-  // "did the run itself succeed" (workflow tests have neither grounding nor a judge verdict).
+  // outcome: grounding gate failure short-circuits to false; else the judge threshold; else the
+  // explicit workflow `passed` (the actual assertion result); else "did the run itself succeed"
+  // as a last-resort fallback for callers that supply none of the above.
   const outcome =
     grounded !== undefined && grounded < 1
       ? false
       : verdict && threshold !== undefined
         ? verdict.score >= threshold
-        : !result.isError;
+        : passed !== undefined
+          ? passed
+          : !result.isError;
 
   const outDir = join(OUTPUTS, RUN_ID);
   mkdirSync(outDir, { recursive: true });
@@ -67,6 +79,7 @@ export function record(label: string, data: RecordData): void {
     nodeid,
     label,
     outcome,
+    passed,
     score: verdict?.score,
     threshold,
     practices: verdict?.results ?? [],

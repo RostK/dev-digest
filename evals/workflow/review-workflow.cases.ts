@@ -166,5 +166,11 @@ export const cases: WorkflowCase[] = [
     skill: "write-spec",
     shouldActivate: false,
     maxTurns: 2,
+    // Symmetric to the positive case: the correct behavior here is to dispatch
+    // implementation-planner (NOT write-spec), and that planner subagent's own grounding pass
+    // routinely runs past the file's global 240s testTimeout — a timeout here would look like a
+    // failure of the "must NOT trigger write-spec" assertion when it's really just the planner
+    // taking its time. maxTurns bounds the parent's turns, not the nested subagent's wall-clock.
+    testTimeoutMs: 480_000,
   },
 ];
