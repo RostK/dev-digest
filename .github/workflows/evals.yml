@@ -101,18 +101,23 @@ jobs:
 
       - name: Job summary
         if: always()
-        working-directory: evals
+        # Pass detector outputs via env (safe quoting) and use `if` blocks — the `[ -n "" ] && echo`
+        # idiom returns exit 1 when a value is empty, which trips bash `set -e` and fails the step.
         env:
-          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+          SKILLS: ${{ steps.detect.outputs.skills }}
+          AGENTS: ${{ steps.detect.outputs.agents }}
+          RUN_WORKFLOW: ${{ steps.detect.outputs.run_workflow }}
+          SKIPPED_SKILLS: ${{ steps.detect.outputs.skipped_skills }}
+          SKIPPED_AGENTS: ${{ steps.detect.outputs.skipped_agents }}
         run: |
           {
             echo '### Harness eval selection'
             echo ''
-            echo "- skills → run: \`${{ steps.detect.outputs.skills }}\`"
-            echo "- agents → run: \`${{ steps.detect.outputs.agents }}\`"
-            echo "- workflow tier: \`${{ steps.detect.outputs.run_workflow }}\`"
-            [ -n "${{ steps.detect.outputs.skipped_skills }}" ] && echo "- SKIP skills (no evals): \`${{ steps.detect.outputs.skipped_skills }}\`"
-            [ -n "${{ steps.detect.outputs.skipped_agents }}" ] && echo "- SKIP agents (no evals): \`${{ steps.detect.outputs.skipped_agents }}\`"
+            echo "- skills → run: \`${SKILLS}\`"
+            echo "- agents → run: \`${AGENTS}\`"
+            echo "- workflow tier: \`${RUN_WORKFLOW}\`"
+            if [ -n "$SKIPPED_SKILLS" ]; then echo "- SKIP skills (no evals): \`${SKIPPED_SKILLS}\`"; fi
+            if [ -n "$SKIPPED_AGENTS" ]; then echo "- SKIP agents (no evals): \`${SKIPPED_AGENTS}\`"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── 2. Skill (content) tier — cheap DeepSeek, direct OpenRouter, no proxy ────
