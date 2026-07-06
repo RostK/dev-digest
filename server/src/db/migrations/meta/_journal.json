@@ -127,6 +127,13 @@
       "when": 1782992541063,
       "tag": "0017_mature_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783367293492,
+      "tag": "0018_small_shadowcat",
+      "breakpoints": true
     }
   ]
 }

@@ -1,38 +1,66 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision, index } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
 
 // ============================================================ Eval / Conformance / Compose
 
-export const evalCases = pgTable('eval_cases', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
-    .notNull()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  ownerKind: text('owner_kind', { enum: ['skill', 'agent'] }).notNull(),
-  ownerId: uuid('owner_id').notNull(),
-  name: text('name').notNull(),
-  inputDiff: text('input_diff'),
-  inputFiles: jsonb('input_files'),
-  inputMeta: jsonb('input_meta'),
-  expectedOutput: jsonb('expected_output'),
-  notes: text('notes'),
-});
+export const evalCases = pgTable(
+  'eval_cases',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    ownerKind: text('owner_kind', { enum: ['skill', 'agent'] }).notNull(),
+    ownerId: uuid('owner_id').notNull(),
+    name: text('name').notNull(),
+    inputDiff: text('input_diff'),
+    inputFiles: jsonb('input_files'),
+    inputMeta: jsonb('input_meta'),
+    expectedOutput: jsonb('expected_output'),
+    notes: text('notes'),
+  },
+  (t) => ({
+    // Supports `listCasesForAgent` (and the skill-owner equivalent): every case
+    // list/read is scoped by (owner_kind, owner_id). owner_id is NOT a real FK
+    // (polymorphic — points at either agents or skills) so Postgres would never
+    // auto-index it; without this the lookup seq-scans eval_cases as it grows.
+    ownerIdx: index('eval_cases_owner_idx').on(t.ownerKind, t.ownerId),
+  }),
+);
 
-export const evalRuns = pgTable('eval_runs', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  caseId: uuid('case_id')
-    .notNull()
-    .references(() => evalCases.id, { onDelete: 'cascade' }),
-  ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
-  actualOutput: jsonb('actual_output'),
-  pass: boolean('pass'),
-  recall: doublePrecision('recall'),
-  precision: doublePrecision('precision'),
-  citationAccuracy: doublePrecision('citation_accuracy'),
-  durationMs: integer('duration_ms'),
-  costUsd: doublePrecision('cost_usd'),
-});
+export const evalRuns = pgTable(
+  'eval_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    caseId: uuid('case_id')
+      .notNull()
+      .references(() => evalCases.id, { onDelete: 'cascade' }),
+    ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
+    actualOutput: jsonb('actual_output'),
+    pass: boolean('pass'),
+    recall: doublePrecision('recall'),
+    precision: doublePrecision('precision'),
+    citationAccuracy: doublePrecision('citation_accuracy'),
+    durationMs: integer('duration_ms'),
+    costUsd: doublePrecision('cost_usd'),
+    // SPEC-05 T3 — one "run group" = a full eval-suite execution against a
+    // single agent version; all cases for that owner run together at one
+    // ran_at, sharing this id. Nullable: a case can still carry a legacy/ad-hoc
+    // single run with no group. NOT a real FK (no `eval_run_groups` table — the
+    // group is a value object, not a row) so it needs an explicit index for the
+    // group-aggregate reads (getGroup / dashboard rollups).
+    groupId: uuid('group_id'),
+    // Snapshot of the agent's config AT RUN TIME (read once at the top of
+    // runSet), so a mid-run edit to the live agent row can never leak into an
+    // already-in-flight run's persisted results — see server/INSIGHTS.md.
+    agentVersion: integer('agent_version'),
+    systemPrompt: text('system_prompt'),
+  },
+  (t) => ({
+    groupIdx: index('eval_runs_group_idx').on(t.groupId),
+  }),
+);
 
 export const conformanceChecks = pgTable('conformance_checks', {
   id: uuid('id').primaryKey().defaultRandom(),
