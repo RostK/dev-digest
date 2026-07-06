@@ -1,0 +1,217 @@
+# Harness evals on CI.
+#
+# WHAT IT DOES
+# On a pull request that touches a skill, an agent, CLAUDE.md, or the eval engine, this workflow
+# runs ONLY the evals that the change implicates (evals/scripts/ci-detect.mjs decides which):
+#
+#   .claude/skills/<name>/**      → run evals/skills/<name>     (content tier — cheap, no proxy)
+#   .claude/agents/<name>.md      → run evals/agents/<name>     (tool tier)  + the workflow tier
+#   CLAUDE.md / .claude/CLAUDE.md → run the workflow tier
+#   evals/src/**  (engine change) → run the workflow tier
+#
+# A changed skill/agent that has NO written evals is NOT a failure — it is printed as
+# "SKIP <name> (no evals)" in the detect step's log and job summary, and simply not tested.
+#
+# MODELS — everything runs on OpenRouter (EVAL_BACKEND=openrouter). No app UI: the model is a job
+# parameter, editable in the `env:` block below or overridable per-run from the Actions
+# "Run workflow" dialog (workflow_dispatch inputs). Split by tier:
+#   - skills (content only)       → a cheap direct-OpenRouter model (DeepSeek V3). No proxy.
+#   - agents + workflow (tools)   → Gemini 2.5 Flash. The Claude Agent SDK only speaks Anthropic's
+#     wire protocol, so a non-Anthropic model here needs the bundled LiteLLM translating proxy
+#     (evals/proxy) running as a sidecar — started per job, torn down after.
+#
+# SECRET: set OPENROUTER_API_KEY in the repo's Actions secrets.
+name: harness evals
+
+on:
+  pull_request:
+    paths:
+      - '.claude/skills/**'
+      - '.claude/agents/**'
+      - 'CLAUDE.md'
+      - '.claude/CLAUDE.md'
+      - 'evals/**'
+      - '.github/workflows/evals.yml'
+  workflow_dispatch:
+    inputs:
+      skills_model:
+        description: 'OpenRouter slug for the skills (content) tier'
+        default: 'deepseek/deepseek-chat'
+      tool_model:
+        description: 'OpenRouter slug for the agent + workflow (tool) tiers'
+        default: 'google/gemini-2.5-flash'
+      judge_model:
+        description: 'OpenRouter slug for the LLM judge'
+        default: 'google/gemini-2.5-flash'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-evals-${{ github.ref }}
+  cancel-in-progress: true
+
+# EVAL_BACKEND is a constant every job/step inherits. The MODEL SWITCH lives in each job's `env:`
+# below (skills vs tool tiers use different defaults) and in the workflow_dispatch inputs above —
+# change a default in one place and the Run-workflow dialog stays in sync.
+env:
+  EVAL_BACKEND: openrouter
+
+jobs:
+  # ── 1. Decide which suites this diff implicates ──────────────────────────────
+  detect:
+    name: detect changed artifacts
+    runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.detect.outputs.skills }}
+      agents: ${{ steps.detect.outputs.agents }}
+      run_workflow: ${{ steps.detect.outputs.run_workflow }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need the PR base commit to diff against
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Compute changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base='${{ github.event.pull_request.base.sha }}'
+            head='${{ github.event.pull_request.head.sha }}'
+          else
+            base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+            head="$(git rev-parse HEAD)"
+          fi
+          echo "Diffing $base...$head"
+          {
+            echo 'files<<__EOF__'
+            git diff --name-only "$base" "$head"
+            echo '__EOF__'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Map changes → suites
+        id: detect
+        working-directory: evals
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: node scripts/ci-detect.mjs
+
+      - name: Job summary
+        if: always()
+        working-directory: evals
+        env:
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
+        run: |
+          {
+            echo '### Harness eval selection'
+            echo ''
+            echo "- skills → run: \`${{ steps.detect.outputs.skills }}\`"
+            echo "- agents → run: \`${{ steps.detect.outputs.agents }}\`"
+            echo "- workflow tier: \`${{ steps.detect.outputs.run_workflow }}\`"
+            [ -n "${{ steps.detect.outputs.skipped_skills }}" ] && echo "- SKIP skills (no evals): \`${{ steps.detect.outputs.skipped_skills }}\`"
+            [ -n "${{ steps.detect.outputs.skipped_agents }}" ] && echo "- SKIP agents (no evals): \`${{ steps.detect.outputs.skipped_agents }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── 2. Skill (content) tier — cheap DeepSeek, direct OpenRouter, no proxy ────
+  skills:
+    name: skill · ${{ matrix.skill }}
+    needs: detect
+    if: needs.detect.outputs.skills != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        skill: ${{ fromJSON(needs.detect.outputs.skills) }}
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.skills_model || 'deepseek/deepseek-chat' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install eval deps
+        working-directory: evals
+        run: pnpm install --frozen-lockfile
+      - name: Run skill eval
+        working-directory: evals
+        # Trailing slash anchors the path filter so "architecture-reviewer" can't also match
+        # "architecture-reviewer-lite" (substring), and one skill's dir is selected exactly.
+        run: pnpm exec vitest run "skills/${{ matrix.skill }}/"
+
+  # ── 3. Agent (tool) tier — Gemini Flash via the LiteLLM proxy ────────────────
+  agents:
+    name: agent · ${{ matrix.agent }}
+    needs: detect
+    if: needs.detect.outputs.agents != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(needs.detect.outputs.agents) }}
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.tool_model || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
+      OPENROUTER_BASE_URL: http://localhost:4000 # the proxy: Agent SDK + judge both route here
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install eval deps
+        working-directory: evals
+        run: pnpm install --frozen-lockfile
+      - name: Start LiteLLM proxy
+        working-directory: evals
+        run: bash scripts/litellm-proxy.sh up
+      - name: Run agent eval
+        working-directory: evals
+        run: pnpm exec vitest run "agents/${{ matrix.agent }}/"
+      - name: Stop LiteLLM proxy
+        if: always()
+        working-directory: evals
+        run: bash scripts/litellm-proxy.sh down
+
+  # ── 4. Workflow tier — live harness, Gemini Flash via the proxy ──────────────
+  workflow:
+    name: workflow tier
+    needs: detect
+    if: needs.detect.outputs.run_workflow == 'true'
+    runs-on: ubuntu-latest
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.tool_model || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
+      OPENROUTER_BASE_URL: http://localhost:4000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install eval deps
+        working-directory: evals
+        run: pnpm install --frozen-lockfile
+      - name: Start LiteLLM proxy
+        working-directory: evals
+        run: bash scripts/litellm-proxy.sh up
+      - name: Run workflow evals
+        working-directory: evals
+        run: pnpm eval:workflow
+      - name: Stop LiteLLM proxy
+        if: always()
+        working-directory: evals
+        run: bash scripts/litellm-proxy.sh down
