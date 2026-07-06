@@ -13,12 +13,14 @@
 # "SKIP <name> (no evals)" in the detect step's log and job summary, and simply not tested.
 #
 # MODELS — everything runs on OpenRouter (EVAL_BACKEND=openrouter). No app UI: the model is a job
-# parameter, editable in the `env:` block below or overridable per-run from the Actions
+# parameter, editable in each job's `env:` block below or overridable per-run from the Actions
 # "Run workflow" dialog (workflow_dispatch inputs). Split by tier:
 #   - skills (content only)       → a cheap direct-OpenRouter model (DeepSeek V3). No proxy.
-#   - agents + workflow (tools)   → Gemini 2.5 Flash. The Claude Agent SDK only speaks Anthropic's
-#     wire protocol, so a non-Anthropic model here needs the bundled LiteLLM translating proxy
-#     (evals/proxy) running as a sidecar — started per job, torn down after.
+#   - agents + workflow (tools)   → Claude Haiku 4.5 via OpenRouter's Anthropic Skin. The Claude
+#     Agent SDK speaks the Anthropic wire protocol, which the Skin serves natively for anthropic/*
+#     slugs — so these tiers hit OpenRouter DIRECTLY (no LiteLLM proxy). A Claude-class model also
+#     reliably drives the subagent-dispatch traces the tool tiers assert on; cheaper non-Anthropic
+#     models under-drive them (measured) and would need the bundled evals/proxy sidecar to run at all.
 #
 # SECRET: set OPENROUTER_API_KEY in the repo's Actions secrets.
 name: harness evals
@@ -38,8 +40,8 @@ on:
         description: 'OpenRouter slug for the skills (content) tier'
         default: 'deepseek/deepseek-chat'
       tool_model:
-        description: 'OpenRouter slug for the agent + workflow (tool) tiers'
-        default: 'google/gemini-2.5-flash'
+        description: 'OpenRouter slug for the agent + workflow (tool) tiers (anthropic/* → no proxy)'
+        default: 'anthropic/claude-haiku-4.5'
       judge_model:
         description: 'OpenRouter slug for the LLM judge'
         default: 'google/gemini-2.5-flash'
@@ -151,7 +153,7 @@ jobs:
         # "architecture-reviewer-lite" (substring), and one skill's dir is selected exactly.
         run: pnpm exec vitest run "skills/${{ matrix.skill }}/"
 
-  # ── 3. Agent (tool) tier — Gemini Flash via the LiteLLM proxy ────────────────
+  # ── 3. Agent (tool) tier — Claude Haiku via OpenRouter's Anthropic Skin (no proxy) ──
   agents:
     name: agent · ${{ matrix.agent }}
     needs: detect
@@ -163,9 +165,8 @@ jobs:
         agent: ${{ fromJSON(needs.detect.outputs.agents) }}
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.tool_model || 'google/gemini-2.5-flash' }}
+      EVAL_MODEL: ${{ inputs.tool_model || 'anthropic/claude-haiku-4.5' }}
       EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
-      OPENROUTER_BASE_URL: http://localhost:4000 # the proxy: Agent SDK + judge both route here
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -177,18 +178,11 @@ jobs:
       - name: Install eval deps
         working-directory: evals
         run: pnpm install --frozen-lockfile
-      - name: Start LiteLLM proxy
-        working-directory: evals
-        run: bash scripts/litellm-proxy.sh up
       - name: Run agent eval
         working-directory: evals
         run: pnpm exec vitest run "agents/${{ matrix.agent }}/"
-      - name: Stop LiteLLM proxy
-        if: always()
-        working-directory: evals
-        run: bash scripts/litellm-proxy.sh down
 
-  # ── 4. Workflow tier — live harness, Gemini Flash via the proxy ──────────────
+  # ── 4. Workflow tier — live harness on Claude Haiku via the Anthropic Skin (no proxy) ──
   workflow:
     name: workflow tier
     needs: detect
@@ -196,9 +190,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-      EVAL_MODEL: ${{ inputs.tool_model || 'google/gemini-2.5-flash' }}
+      EVAL_MODEL: ${{ inputs.tool_model || 'anthropic/claude-haiku-4.5' }}
       EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
-      OPENROUTER_BASE_URL: http://localhost:4000
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -210,13 +203,6 @@ jobs:
       - name: Install eval deps
         working-directory: evals
         run: pnpm install --frozen-lockfile
-      - name: Start LiteLLM proxy
-        working-directory: evals
-        run: bash scripts/litellm-proxy.sh up
       - name: Run workflow evals
         working-directory: evals
         run: pnpm eval:workflow
-      - name: Stop LiteLLM proxy
-        if: always()
-        working-directory: evals
-        run: bash scripts/litellm-proxy.sh down
