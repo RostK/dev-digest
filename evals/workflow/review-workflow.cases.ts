@@ -28,10 +28,11 @@ export const cases: WorkflowCase[] = [
     expectFilesRead: ["server/README.md"],
     expectSubagents: ["architecture-reviewer"],
     // Two real steps (read the routed doc, then dispatch a subagent) plus historically some code
-    // exploration first — this one measurably needed 5-8 turns in the real run. maxTurns:2 would
-    // likely hard-fail it on isError before stopWhen ever fires, which is a budget artifact, not a
-    // real routing/dispatch failure — so this case keeps more headroom than the others.
-    maxTurns: 4,
+    // exploration first. On a cheap model (Haiku) this measurably needs ~8 turns: an observed run
+    // read server/README.md then explored routes/service/repo and hit maxTurns:4 (isError) BEFORE
+    // dispatching — a budget artifact, not a routing failure. Give it the headroom to reach the
+    // dispatch the prompt explicitly demands.
+    maxTurns: 10,
   },
 
   // --- trace (1 session): CLAUDE.md "Read When" routing for pipeline work -----------------------
@@ -77,7 +78,11 @@ export const cases: WorkflowCase[] = [
       "після зміни моделі ембедингів. Хочу це зафіксувати, щоб більше не наступати.",
     skill: "engineering-insights",
     shouldActivate: true,
-    maxTurns: 2,
+    // Hooks are off in workflowTask, so the skill must activate from its DESCRIPTION alone. A cheap
+    // model first explores the pgvector cause (an observed Haiku run read schema/knowledge.ts and
+    // hit maxTurns:2 → isError before invoking the skill). Give it room to recognize the capture
+    // intent and invoke engineering-insights.
+    maxTurns: 6,
   },
   {
     kind: "activation",

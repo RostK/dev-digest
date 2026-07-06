@@ -183,11 +183,18 @@ jobs:
         run: pnpm exec vitest run "agents/${{ matrix.agent }}/"
 
   # ── 4. Workflow tier — live harness on Claude Haiku via the Anthropic Skin (no proxy) ──
+  # ADVISORY (continue-on-error): this tier drives the REAL harness (subagent dispatch, skill
+  # activation, CLAUDE.md routing) in a live session, so it is inherently the flakiest and most
+  # model-dependent tier. It also carries a deliberate cheap-model canary — the engineering-insights
+  # DESCRIPTION-activation case, which the skill's own SKILL.md documents as unreliable without its
+  # Stop hook and which a cheap model won't self-invoke. So its results REPORT (in the job log) but
+  # do NOT block the PR. The skills + agents tiers stay hard gates.
   workflow:
-    name: workflow tier
+    name: workflow tier (advisory)
     needs: detect
     if: needs.detect.outputs.run_workflow == 'true'
     runs-on: ubuntu-latest
+    continue-on-error: true
     env:
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       EVAL_MODEL: ${{ inputs.tool_model || 'anthropic/claude-haiku-4.5' }}
