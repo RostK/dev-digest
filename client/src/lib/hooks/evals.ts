@@ -24,17 +24,22 @@ export function useAgentEvalCases(agentId: string | null | undefined) {
 }
 
 /** Create an eval case from an existing finding (captures the PR's diff as the
- *  case input + the finding as the expected output). Invalidates the agent's
- *  eval-cases list so the new case appears immediately. */
-export function useCreateEvalFromFinding(agentId: string | null | undefined) {
+ *  case input + the finding as the expected output). Finding-centric: the
+ *  finding's agent is resolved server-side, so callers only supply the
+ *  finding id (e.g. FindingCard, which has no agentId in scope). Invalidates
+ *  the whole eval-cases query family (any agent) since we don't know which
+ *  agent's list changed without the id. */
+export function useCreateEvalFromFinding() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (findingId: string) =>
-      api.post<EvalCaseWithState>(`/agents/${agentId}/eval-cases/from-finding`, {
+    mutationFn: ({ findingId }: { findingId: string }) =>
+      api.post<EvalCaseWithState>("/eval-cases/from-finding", {
         finding_id: findingId,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["eval-cases", agentId] });
+      qc.invalidateQueries({
+        predicate: (query) => query.queryKey[0] === "eval-cases",
+      });
     },
   });
 }
