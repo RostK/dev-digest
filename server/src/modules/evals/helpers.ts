@@ -62,6 +62,31 @@ export function expectationFromFinding(finding: FindingRow): EvalExpectation {
   return { kind, findings: [expected] };
 }
 
+/**
+ * Run `fn` over `items` with at most `limit` promises in flight at once,
+ * PRESERVING INPUT ORDER in the returned array (`results[i]` ↔ `items[i]`) even
+ * though completion order is not deterministic — so an order-sensitive caller
+ * (runSet assembling its per-case outcomes) stays stable. A rejected `fn`
+ * rejects the whole call. `limit <= 0` is treated as 1; an empty `items` is a
+ * no-op returning `[]`.
+ */
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (let i = next++; i < items.length; i = next++) {
+      results[i] = await fn(items[i]!, i);
+    }
+  };
+  const workers = Math.max(1, Math.min(limit, items.length || 1));
+  await Promise.all(Array.from({ length: workers }, () => worker()));
+  return results;
+}
+
 /** A human-readable case name derived from the finding (AC-1/AC-2 traceability). */
 export function caseNameFromFinding(finding: FindingRow): string {
   const verb = finding.dismissedAt ? 'must-not-flag' : 'must-find';

@@ -53,10 +53,12 @@ const CASES: EvalCaseWithState[] = [
 let casesData: EvalCaseWithState[] = CASES;
 const runSetMutate = vi.fn();
 let runSetPending = false;
+let progressData: { done: number; total: number } | undefined = undefined;
 
 vi.mock("@/lib/hooks/evals", () => ({
   useAgentEvalCases: () => ({ data: casesData }),
   useRunEvalSet: () => ({ mutate: runSetMutate, isPending: runSetPending }),
+  useEvalRunProgress: () => ({ data: progressData }),
 }));
 
 import { EvalsTab } from "./EvalsTab";
@@ -66,6 +68,7 @@ afterEach(() => {
   runSetMutate.mockClear();
   casesData = CASES;
   runSetPending = false;
+  progressData = undefined;
 });
 
 function renderTab() {
@@ -106,13 +109,20 @@ describe("Agent Editor Evals tab (T8)", () => {
     expect(screen.queryByText(/Add at least 8 cases/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Run all"));
-    expect(runSetMutate).toHaveBeenCalledWith("ag1");
+    expect(runSetMutate).toHaveBeenCalledWith({
+      agentId: "ag1",
+      runId: expect.any(String),
+    });
   });
 
-  it("shows a running state while the eval set mutation is pending", () => {
+  it("shows a running state + per-case progress while the eval set mutation is pending", () => {
     runSetPending = true;
+    progressData = { done: 1, total: 3 };
     renderTab();
 
+    // The button shows the generic running label…
     expect(screen.getByText("Running…")).toBeInTheDocument();
+    // …and the progress bar shows the per-case count from the poll.
+    expect(screen.getByText("Running case 1 of 3…")).toBeInTheDocument();
   });
 });

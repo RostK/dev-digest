@@ -254,6 +254,20 @@ export class EvalRepository {
   }
 
   /**
+   * How many rows a run-group has persisted so far — powers the live run
+   * progress poll. `workspace_id`-scoped via the join through `eval_cases`, so a
+   * foreign group id counts 0 (never leaks another tenant's progress).
+   */
+  async countRunsInGroup(workspaceId: string, groupId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ n: sql<number>`count(*)`.mapWith(Number) })
+      .from(t.evalRuns)
+      .innerJoin(t.evalCases, eq(t.evalRuns.caseId, t.evalCases.id))
+      .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalRuns.groupId, groupId)));
+    return row?.n ?? 0;
+  }
+
+  /**
    * Aggregate one run-group's metrics (T4). `workspace_id`-scoped via the
    * join through `eval_cases` — a group id from another tenant resolves to
    * `undefined`, never leaking cross-tenant aggregates.

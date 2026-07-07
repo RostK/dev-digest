@@ -8,6 +8,12 @@
  *  anything BUT the snapshot fields runSet captures (system_prompt/version). */
 export const EVAL_REVIEW_STRATEGY = 'single-pass' as const;
 
+/** Max eval cases whose review pass runs CONCURRENTLY within one `runSet`. Bounds
+ *  the real-LLM fan-out: a large case set no longer runs strictly sequentially
+ *  (slow — one ~15s review at a time) but also never unboundedly (provider rate
+ *  limits / overload). Each case is still independent; only the wall-clock changes. */
+export const EVAL_RUN_CONCURRENCY = 4;
+
 /** T4 — how many of the most recent run-groups feed the dashboard trend line. */
 export const DASHBOARD_TREND_LIMIT = 10;
 

@@ -54,18 +54,39 @@ export function useAgentEvalRuns(agentId: string | null | undefined) {
   });
 }
 
-/** Run the agent's whole eval set now. Invalidates eval-cases, eval-runs, AND
- *  the eval-dashboard for that agent since all three change together. */
+/** Run the agent's whole eval set now. The caller mints `runId` (a UUID) so it
+ *  can poll `useEvalRunProgress` while this long request is in flight; the server
+ *  uses it as the run's group id. Invalidates eval-cases, eval-runs, AND the
+ *  eval-dashboard for that agent since all three change together. */
 export function useRunEvalSet() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (agentId: string) =>
-      api.post<EvalRunGroup>(`/agents/${agentId}/eval-runs`),
-    onSuccess: (_d, agentId) => {
+    mutationFn: ({ agentId, runId }: { agentId: string; runId: string }) =>
+      api.post<EvalRunGroup>(`/agents/${agentId}/eval-runs`, { run_id: runId }),
+    onSuccess: (_d, { agentId }) => {
       qc.invalidateQueries({ queryKey: ["eval-cases", agentId] });
       qc.invalidateQueries({ queryKey: ["eval-runs", agentId] });
       qc.invalidateQueries({ queryKey: ["eval-dashboard", agentId] });
     },
+  });
+}
+
+/** Live per-case progress of an in-flight `useRunEvalSet`. Polls every second
+ *  while `enabled` (i.e. the run mutation is pending) and a `runId` is known.
+ *  Returns `{ done, total }`; `done` climbs as cases finish (one row each). */
+export function useEvalRunProgress(
+  agentId: string,
+  runId: string | null,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["eval-progress", agentId, runId],
+    queryFn: () =>
+      api.get<{ done: number; total: number }>(
+        `/agents/${agentId}/eval-progress?run=${runId}`,
+      ),
+    enabled: enabled && !!runId,
+    refetchInterval: enabled ? 1000 : false,
   });
 }
 

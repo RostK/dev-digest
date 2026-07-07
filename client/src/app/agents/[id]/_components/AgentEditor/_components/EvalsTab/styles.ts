@@ -15,6 +15,7 @@ export const s = {
   headerLeft: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
   h2: { fontSize: 18, fontWeight: 700 } satisfies CSSProperties,
   actions: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  progressWrap: { margin: "10px 0 4px" } satisfies CSSProperties,
   hint: {
     fontSize: 13,
     color: "var(--text-secondary)",

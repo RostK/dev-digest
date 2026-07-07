@@ -457,6 +457,39 @@ d('evals module (Testcontainers pg)', () => {
     expect(agg?.citationAccuracy).not.toBeCloseTo(0.625, 3);
   });
 
+  it('runSet uses the CLIENT-supplied run id as the group id, and runProgress ' +
+    'reports done/total for that group', async () => {
+    const container = makeContainer();
+    const service = new EvalService(container);
+    const { agent } = await seedRepoPrAndReview();
+
+    const repo = new EvalRepository(pg.handle.db);
+    for (const n of [1, 2, 3]) {
+      await repo.createCase({
+        workspaceId,
+        ownerKind: 'agent',
+        ownerId: agent.id,
+        name: `progress case ${n}`,
+        inputDiff: `diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n${PATCH}`,
+        expectedOutput: { kind: 'must_find', findings: [{ file: 'src/config.ts', start_line: 11, end_line: 11 }] },
+      });
+    }
+
+    const runId = randomUUID();
+    const result = await service.runSet(workspaceId, agent.id, runId);
+    // The provided id IS the group id (so the client's progress poll addresses it).
+    expect(result.group_id).toBe(runId);
+    expect(result.cases_run).toBe(3);
+
+    // All 3 cases ran under bounded concurrency and persisted; progress is 3/3.
+    const progress = await service.runProgress(workspaceId, agent.id, runId);
+    expect(progress).toEqual({ done: 3, total: 3 });
+
+    // A foreign/unknown group id resolves to done 0 (never leaks progress).
+    const none = await service.runProgress(workspaceId, agent.id, randomUUID());
+    expect(none.done).toBe(0);
+  });
+
   it('AC-18: the global dashboard reads recent runs + a per-agent summary rollup ' +
     'across every agent, with ZERO container.llm calls', async () => {
     const mockLlm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });

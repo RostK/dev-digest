@@ -19,13 +19,23 @@ const FromFindingBody = z.object({ finding_id: z.string().uuid() });
  *  surfacing as an opaque 500 (a valid-but-unknown id still 404s downstream). */
 const CompareQuery = z.object({ a: z.string().uuid(), b: z.string().uuid() });
 
+/** `POST /agents/:id/eval-runs` body — the client mints the run's group id up
+ *  front so it can poll `/eval-progress?run=` while this (long) request is in
+ *  flight. Optional: absent → the server mints one (a non-progress caller). */
+const RunSetBody = z.object({ run_id: z.string().uuid().optional() });
+
+/** `GET /agents/:id/eval-progress?run=<groupId>` — live done/total for an
+ *  in-flight run. `run` is the client-minted group id (a UUID). */
+const ProgressQuery = z.object({ run: z.string().uuid() });
+
 /**
  * evals module (SPEC-05 T4 — read side + routes; write side/schema/scorer are
  * T3, committed).
- *   POST   /agents/:id/eval-runs          → run the agent's eval set now
+ *   POST   /agents/:id/eval-runs          → run the agent's eval set now ({run_id?})
  *   POST   /eval-cases/from-finding       → {finding_id} create a case from a finding
  *   GET    /agents/:id/eval-cases         → cases + latest-run state
  *   GET    /agents/:id/eval-runs          → aggregated run-history (most-recent first)
+ *   GET    /agents/:id/eval-progress?run= → live done/total for an in-flight run
  *   GET    /agents/:id/eval-dashboard     → per-agent dashboard (metrics/trend/alert)
  *   GET    /evals/compare?a=&b=           → side-by-side run-group comparison
  *   GET    /evals                         → workspace-wide dashboard
@@ -38,10 +48,13 @@ export default async function evalsRoutes(appBase: FastifyInstance) {
   // ---- Run the eval set (mutating; fans out to the LLM once per case) -----
   app.post(
     '/agents/:id/eval-runs',
-    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    {
+      schema: { params: IdParams, body: RunSetBody },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
     async (req) => {
       const { workspaceId } = await getContext(container, req);
-      const result = await service.runSet(workspaceId, req.params.id);
+      const result = await service.runSet(workspaceId, req.params.id, req.body?.run_id);
       // Prefer the freshly-persisted group aggregate (carries the real
       // summed cost_usd); fall back to the runSet result itself for an
       // all-skipped set (zero rows written → no group aggregate to read).
@@ -81,6 +94,16 @@ export default async function evalsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     return service.listRunGroupsForAgent(workspaceId, req.params.id);
   });
+
+  // Live progress of an in-flight run (polled by the Evals tab while running).
+  app.get(
+    '/agents/:id/eval-progress',
+    { schema: { params: IdParams, querystring: ProgressQuery } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.runProgress(workspaceId, req.params.id, req.query.run);
+    },
+  );
 
   app.get('/agents/:id/eval-dashboard', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(container, req);

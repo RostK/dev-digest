@@ -17,8 +17,15 @@ import {
   DASHBOARD_RECENT_RUNS_LIMIT,
   DASHBOARD_TREND_LIMIT,
   EVAL_REVIEW_STRATEGY,
+  EVAL_RUN_CONCURRENCY,
 } from './constants.js';
-import { buildDiffFromPrFiles, caseNameFromFinding, expectationFromFinding, parseCaseDiff } from './helpers.js';
+import {
+  buildDiffFromPrFiles,
+  caseNameFromFinding,
+  expectationFromFinding,
+  mapWithConcurrency,
+  parseCaseDiff,
+} from './helpers.js';
 import { EvalRepository, type EvalCaseRow, type EvalRunRow, type GroupAggregate } from './repository.js';
 import { aggregateRun, scoreCase, type CaseScoreResult } from './scoring.js';
 
@@ -101,7 +108,7 @@ export class EvalService {
    * never sent to the engine. A set mixing invalid + valid cases still
    * completes every valid case.
    */
-  async runSet(workspaceId: string, agentId: string): Promise<RunSetResult> {
+  async runSet(workspaceId: string, agentId: string, runId?: string): Promise<RunSetResult> {
     const agent = await this.container.agentsRepo.getById(workspaceId, agentId);
     if (!agent) throw new NotFoundError('Agent not found');
 
@@ -120,70 +127,83 @@ export class EvalService {
     const llm = await this.container.llm(agent.provider);
     const skillBodies = await this.container.agentsRepo.enabledSkillBodies(agentId);
 
-    const groupId = randomUUID();
+    // Reuse the CLIENT-supplied run id (so it can poll progress while this call
+    // is in flight) or mint one. This is the shared group_id every row carries.
+    const groupId = runId ?? randomUUID();
     const cases = await this.repo.getExpectedCasesForAgent(workspaceId, agentId);
 
-    const outcomes: CaseRunOutcome[] = [];
-    const caseResults: CaseScoreResult[] = [];
+    // Cases run with BOUNDED CONCURRENCY (EVAL_RUN_CONCURRENCY) — the review pass
+    // is the slow part and each case is independent, so a large set no longer
+    // runs strictly one-at-a-time. `mapWithConcurrency` preserves input order in
+    // its result, so the per-case `outcomes` list stays deterministic regardless
+    // of completion order. The snapshot/llm/skillBodies captured above are shared
+    // read-only across every concurrent case.
+    const perCase = await mapWithConcurrency(
+      cases,
+      EVAL_RUN_CONCURRENCY,
+      async (c): Promise<{ outcome: CaseRunOutcome; caseScore: CaseScoreResult | null }> => {
+        // AC-16 — never send an empty/missing diff to the engine.
+        if (!c.inputDiff || c.inputDiff.trim().length === 0) {
+          return { outcome: { caseId: c.id, skipped: true, reason: 'empty or missing input_diff' }, caseScore: null };
+        }
 
-    for (const c of cases) {
-      // AC-16 — never send an empty/missing diff to the engine.
-      if (!c.inputDiff || c.inputDiff.trim().length === 0) {
-        outcomes.push({ caseId: c.id, skipped: true, reason: 'empty or missing input_diff' });
-        continue;
-      }
+        const expectedParsed = EvalExpectationSchema.safeParse(c.expectedOutput);
+        if (!expectedParsed.success) {
+          return {
+            outcome: { caseId: c.id, skipped: true, reason: 'expected_output failed EvalExpectation schema' },
+            caseScore: null,
+          };
+        }
+        const expectation = expectedParsed.data;
 
-      const expectedParsed = EvalExpectationSchema.safeParse(c.expectedOutput);
-      if (!expectedParsed.success) {
-        outcomes.push({ caseId: c.id, skipped: true, reason: 'expected_output failed EvalExpectation schema' });
-        continue;
-      }
-      const expectation = expectedParsed.data;
+        const diff = parseCaseDiff(c.inputDiff);
+        if (diff.files.length === 0) {
+          return { outcome: { caseId: c.id, skipped: true, reason: 'input_diff parsed to zero files' }, caseScore: null };
+        }
 
-      const diff = parseCaseDiff(c.inputDiff);
-      if (diff.files.length === 0) {
-        outcomes.push({ caseId: c.id, skipped: true, reason: 'input_diff parsed to zero files' });
-        continue;
-      }
+        const start = Date.now();
+        const outcome = await reviewPullRequest({
+          systemPrompt: snapshot.systemPrompt,
+          model: snapshot.model,
+          diff,
+          llm,
+          strategy: snapshot.strategy,
+          ...(skillBodies.length ? { skills: skillBodies } : {}),
+          task: `Eval case "${c.name}"`,
+          sessionId: `eval:${agentId}:${c.id}`,
+        });
+        const durationMs = Date.now() - start;
 
-      const start = Date.now();
-      const outcome = await reviewPullRequest({
-        systemPrompt: snapshot.systemPrompt,
-        model: snapshot.model,
-        diff,
-        llm,
-        strategy: snapshot.strategy,
-        ...(skillBodies.length ? { skills: skillBodies } : {}),
-        task: `Eval case "${c.name}"`,
-        sessionId: `eval:${agentId}:${c.id}`,
-      });
-      const durationMs = Date.now() - start;
+        const caseScore = scoreCase({
+          expectation,
+          produced: outcome.review.findings,
+          dropped: outcome.dropped.length,
+        });
 
-      const caseScore = scoreCase({
-        expectation,
-        produced: outcome.review.findings,
-        dropped: outcome.dropped.length,
-      });
-      caseResults.push(caseScore);
+        const run = await this.repo.insertRun({
+          caseId: c.id,
+          actualOutput: outcome.review,
+          pass: caseScore.pass,
+          recall: caseScore.recall_case,
+          precision: caseScore.precision_case,
+          citationAccuracy:
+            caseScore.kept + caseScore.dropped === 0 ? 1 : caseScore.kept / (caseScore.kept + caseScore.dropped),
+          kept: caseScore.kept,
+          dropped: caseScore.dropped,
+          durationMs,
+          costUsd: outcome.costUsd,
+          groupId,
+          agentVersion: snapshot.version,
+          systemPrompt: snapshot.systemPrompt,
+        });
+        return { outcome: { caseId: c.id, skipped: false, run }, caseScore };
+      },
+    );
 
-      const run = await this.repo.insertRun({
-        caseId: c.id,
-        actualOutput: outcome.review,
-        pass: caseScore.pass,
-        recall: caseScore.recall_case,
-        precision: caseScore.precision_case,
-        citationAccuracy:
-          caseScore.kept + caseScore.dropped === 0 ? 1 : caseScore.kept / (caseScore.kept + caseScore.dropped),
-        kept: caseScore.kept,
-        dropped: caseScore.dropped,
-        durationMs,
-        costUsd: outcome.costUsd,
-        groupId,
-        agentVersion: snapshot.version,
-        systemPrompt: snapshot.systemPrompt,
-      });
-      outcomes.push({ caseId: c.id, skipped: false, run });
-    }
+    const outcomes: CaseRunOutcome[] = perCase.map((p) => p.outcome);
+    const caseResults: CaseScoreResult[] = perCase
+      .map((p) => p.caseScore)
+      .filter((s): s is CaseScoreResult => s !== null);
 
     const aggregate = aggregateRun(caseResults);
 
@@ -196,6 +216,26 @@ export class EvalService {
       outcomes,
       aggregate,
     };
+  }
+
+  /**
+   * Live progress of an in-flight `runSet`, polled by the UI while the (single,
+   * long) `POST /agents/:id/eval-runs` request is pending. `done` = rows already
+   * persisted for this group (one per completed case); `total` = the agent's
+   * case count. Skipped cases never write a row, so `done` may settle just below
+   * `total` — the UI ends the indicator when the run mutation resolves, not when
+   * done === total. Workspace-scoped; a foreign group id resolves to done 0.
+   */
+  async runProgress(
+    workspaceId: string,
+    agentId: string,
+    groupId: string,
+  ): Promise<{ done: number; total: number }> {
+    const [done, cases] = await Promise.all([
+      this.repo.countRunsInGroup(workspaceId, groupId),
+      this.repo.getExpectedCasesForAgent(workspaceId, agentId),
+    ]);
+    return { done, total: cases.length };
   }
 
   // ===========================================================================

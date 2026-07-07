@@ -9,8 +9,8 @@
 import React from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Badge, Button, EmptyState, SectionLabel } from "@devdigest/ui";
-import { useAgentEvalCases, useRunEvalSet } from "@/lib/hooks/evals";
+import { Badge, Button, EmptyState, PercentProgress, SectionLabel } from "@devdigest/ui";
+import { useAgentEvalCases, useEvalRunProgress, useRunEvalSet } from "@/lib/hooks/evals";
 import { s } from "./styles";
 
 const MIN_CASES_FOR_SIGNAL = 8;
@@ -35,11 +35,21 @@ export function EvalsTab({ agentId }: { agentId: string }) {
   const t = useTranslations("evals");
   const casesQ = useAgentEvalCases(agentId);
   const runSet = useRunEvalSet();
+  const [runId, setRunId] = React.useState<string | null>(null);
 
   const cases = casesQ.data ?? [];
   const running = runSet.isPending;
+  const progress = useEvalRunProgress(agentId, runId, running);
   const runCases = cases.filter((c) => c.last_run_pass !== null);
   const passedCount = runCases.filter((c) => c.last_run_pass).length;
+
+  function runAll() {
+    // Mint the run id client-side so the progress poll can address this run
+    // while the (long) run request is still in flight.
+    const id = crypto.randomUUID();
+    setRunId(id);
+    runSet.mutate({ agentId, runId: id });
+  }
 
   return (
     <div style={s.wrap}>
@@ -57,12 +67,29 @@ export function EvalsTab({ agentId }: { agentId: string }) {
             icon="Play"
             loading={running}
             disabled={cases.length === 0}
-            onClick={() => runSet.mutate(agentId)}
+            onClick={runAll}
           >
             {running ? t("evalsTab.running") : t("evalsTab.runAll")}
           </Button>
         </div>
       </div>
+
+      {running && (
+        <div style={s.progressWrap}>
+          <PercentProgress
+            value={
+              progress.data && progress.data.total > 0
+                ? (progress.data.done / progress.data.total) * 100
+                : 0
+            }
+            label={
+              progress.data
+                ? t("evalsTab.progress", { done: progress.data.done, total: progress.data.total })
+                : t("evalsTab.running")
+            }
+          />
+        </div>
+      )}
 
       {cases.length < MIN_CASES_FOR_SIGNAL && (
         <p style={s.hint}>{t("evalsTab.minCasesHint", { count: cases.length })}</p>
