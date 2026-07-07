@@ -48,9 +48,9 @@ export function EvalsTab({ agentId }: { agentId: string }) {
           <SectionLabel icon="Gauge">{t("evalsTab.title")}</SectionLabel>
         </div>
         <div style={s.actions}>
-          <Button kind="secondary" size="sm" icon="Plus">
-            {t("evalsTab.newCase")}
-          </Button>
+          {/* Eval cases are created finding-centrically ("Turn into eval case"
+              on an accepted/dismissed finding) — there is no manual create-case
+              endpoint, so no "New case" button here (a dead no-op stub before). */}
           <Button
             kind="primary"
             size="sm"
