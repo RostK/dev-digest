@@ -490,6 +490,41 @@ d('evals module (Testcontainers pg)', () => {
     expect(none.done).toBe(0);
   });
 
+  it('fails-soft: a case whose review THROWS is recorded as skipped and the run ' +
+    'still completes (never aborts the whole set)', async () => {
+    // A provider that always throws on the structured review call.
+    class ThrowingLLM extends MockLLMProvider {
+      override async completeStructured<T>(): Promise<never> {
+        throw new Error('simulated provider outage');
+      }
+    }
+    const container = new Container(config(), pg.handle.db, {
+      llm: { openai: new ThrowingLLM('openai', {}) },
+    });
+    const service = new EvalService(container);
+    const { agent } = await seedRepoPrAndReview();
+
+    const repo = new EvalRepository(pg.handle.db);
+    for (const n of [1, 2]) {
+      await repo.createCase({
+        workspaceId,
+        ownerKind: 'agent',
+        ownerId: agent.id,
+        name: `flaky case ${n}`,
+        inputDiff: `diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n${PATCH}`,
+        expectedOutput: { kind: 'must_find', findings: [{ file: 'src/config.ts', start_line: 11, end_line: 11 }] },
+      });
+    }
+
+    // The run RESOLVES (does not throw) even though every review errored.
+    const result = await service.runSet(workspaceId, agent.id);
+    expect(result.cases_run).toBe(0);
+    expect(result.cases_skipped).toBe(2);
+    expect(result.outcomes.every((o) => o.skipped)).toBe(true);
+    // No rows were written for the errored cases.
+    expect(await repo.countRunsInGroup(workspaceId, result.group_id)).toBe(0);
+  });
+
   it('AC-18: the global dashboard reads recent runs + a per-agent summary rollup ' +
     'across every agent, with ZERO container.llm calls', async () => {
     const mockLlm = new MockLLMProvider('openai', { structured: REVIEW_FIXTURE });

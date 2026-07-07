@@ -16,6 +16,7 @@ import {
   DASHBOARD_ALERT_DROP_THRESHOLD,
   DASHBOARD_RECENT_RUNS_LIMIT,
   DASHBOARD_TREND_LIMIT,
+  EVAL_CASE_TIMEOUT_MS,
   EVAL_REVIEW_STRATEGY,
   EVAL_RUN_CONCURRENCY,
 } from './constants.js';
@@ -25,6 +26,7 @@ import {
   expectationFromFinding,
   mapWithConcurrency,
   parseCaseDiff,
+  withTimeout,
 } from './helpers.js';
 import { EvalRepository, type EvalCaseRow, type EvalRunRow, type GroupAggregate } from './repository.js';
 import { aggregateRun, scoreCase, type CaseScoreResult } from './scoring.js';
@@ -161,42 +163,56 @@ export class EvalService {
           return { outcome: { caseId: c.id, skipped: true, reason: 'input_diff parsed to zero files' }, caseScore: null };
         }
 
+        // Fail-soft: a slow/hung/erroring review must NOT abort the whole run
+        // (with bounded concurrency a stuck case would otherwise pin a worker and
+        // the run would never complete). Bound each review by EVAL_CASE_TIMEOUT_MS
+        // and record any timeout/throw as a skipped case (AC-16-style) so the rest
+        // of the set still finishes and scores.
         const start = Date.now();
-        const outcome = await reviewPullRequest({
-          systemPrompt: snapshot.systemPrompt,
-          model: snapshot.model,
-          diff,
-          llm,
-          strategy: snapshot.strategy,
-          ...(skillBodies.length ? { skills: skillBodies } : {}),
-          task: `Eval case "${c.name}"`,
-          sessionId: `eval:${agentId}:${c.id}`,
-        });
-        const durationMs = Date.now() - start;
+        try {
+          const outcome = await withTimeout(
+            reviewPullRequest({
+              systemPrompt: snapshot.systemPrompt,
+              model: snapshot.model,
+              diff,
+              llm,
+              strategy: snapshot.strategy,
+              ...(skillBodies.length ? { skills: skillBodies } : {}),
+              task: `Eval case "${c.name}"`,
+              sessionId: `eval:${agentId}:${c.id}`,
+            }),
+            EVAL_CASE_TIMEOUT_MS,
+            `eval case "${c.name}" review`,
+          );
+          const durationMs = Date.now() - start;
 
-        const caseScore = scoreCase({
-          expectation,
-          produced: outcome.review.findings,
-          dropped: outcome.dropped.length,
-        });
+          const caseScore = scoreCase({
+            expectation,
+            produced: outcome.review.findings,
+            dropped: outcome.dropped.length,
+          });
 
-        const run = await this.repo.insertRun({
-          caseId: c.id,
-          actualOutput: outcome.review,
-          pass: caseScore.pass,
-          recall: caseScore.recall_case,
-          precision: caseScore.precision_case,
-          citationAccuracy:
-            caseScore.kept + caseScore.dropped === 0 ? 1 : caseScore.kept / (caseScore.kept + caseScore.dropped),
-          kept: caseScore.kept,
-          dropped: caseScore.dropped,
-          durationMs,
-          costUsd: outcome.costUsd,
-          groupId,
-          agentVersion: snapshot.version,
-          systemPrompt: snapshot.systemPrompt,
-        });
-        return { outcome: { caseId: c.id, skipped: false, run }, caseScore };
+          const run = await this.repo.insertRun({
+            caseId: c.id,
+            actualOutput: outcome.review,
+            pass: caseScore.pass,
+            recall: caseScore.recall_case,
+            precision: caseScore.precision_case,
+            citationAccuracy:
+              caseScore.kept + caseScore.dropped === 0 ? 1 : caseScore.kept / (caseScore.kept + caseScore.dropped),
+            kept: caseScore.kept,
+            dropped: caseScore.dropped,
+            durationMs,
+            costUsd: outcome.costUsd,
+            groupId,
+            agentVersion: snapshot.version,
+            systemPrompt: snapshot.systemPrompt,
+          });
+          return { outcome: { caseId: c.id, skipped: false, run }, caseScore };
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : 'review failed';
+          return { outcome: { caseId: c.id, skipped: true, reason }, caseScore: null };
+        }
       },
     );
 

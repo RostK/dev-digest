@@ -14,6 +14,12 @@ export const EVAL_REVIEW_STRATEGY = 'single-pass' as const;
  *  limits / overload). Each case is still independent; only the wall-clock changes. */
 export const EVAL_RUN_CONCURRENCY = 4;
 
+/** Per-case wall-clock budget for the review pass. A single slow/hung LLM call
+ *  must NOT stall the whole run (with bounded concurrency, one stuck case would
+ *  otherwise block a worker and the run never completes) — on timeout the case
+ *  fails-soft as a skip (reason recorded) and the rest of the set proceeds. */
+export const EVAL_CASE_TIMEOUT_MS = 90_000;
+
 /** T4 — how many of the most recent run-groups feed the dashboard trend line. */
 export const DASHBOARD_TREND_LIMIT = 10;
 

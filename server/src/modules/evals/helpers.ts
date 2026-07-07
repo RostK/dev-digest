@@ -87,6 +87,20 @@ export async function mapWithConcurrency<T, R>(
   return results;
 }
 
+/**
+ * Reject `p` if it doesn't settle within `ms`, so a hung dependency (a stuck
+ * LLM call) can't block the caller forever. The underlying promise is NOT
+ * cancelled (fetch has no cheap cancel here) — it's abandoned, its late result
+ * ignored. `label` names the operation in the timeout error.
+ */
+export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
 /** A human-readable case name derived from the finding (AC-1/AC-2 traceability). */
 export function caseNameFromFinding(finding: FindingRow): string {
   const verb = finding.dismissedAt ? 'must-not-flag' : 'must-find';
