@@ -22,6 +22,7 @@ import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
 import { githubBlobUrl } from "@/lib/github-urls";
 import { useCreateEvalFromFinding } from "@/lib/hooks/evals";
+import { useToast } from "@/lib/toast";
 import { s } from "./styles";
 
 export function FindingCard({
@@ -53,6 +54,7 @@ export function FindingCard({
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
   const createEvalCase = useCreateEvalFromFinding();
+  const toast = useToast();
 
   return (
     <div data-finding-id={f.id} style={s.card(!!focused, sevColor)}>
@@ -118,11 +120,17 @@ export function FindingCard({
               <Button
                 kind="ghost"
                 size="sm"
-                icon="FlaskConical"
-                disabled={createEvalCase.isPending}
-                onClick={() => createEvalCase.mutate({ findingId: f.id })}
+                icon={createEvalCase.isSuccess ? "Check" : "FlaskConical"}
+                loading={createEvalCase.isPending}
+                disabled={createEvalCase.isPending || createEvalCase.isSuccess}
+                onClick={() =>
+                  createEvalCase.mutate(
+                    { findingId: f.id },
+                    { onSuccess: () => toast.success(tEvals("caseCreatedToast")) },
+                  )
+                }
               >
-                {tEvals("turnIntoEvalCase")}
+                {createEvalCase.isSuccess ? tEvals("caseCreatedLabel") : tEvals("turnIntoEvalCase")}
               </Button>
             )}
           </div>

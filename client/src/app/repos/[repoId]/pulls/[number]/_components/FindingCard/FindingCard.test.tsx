@@ -8,7 +8,10 @@ import { FindingCard } from "./FindingCard";
 
 const mutateMock = vi.fn();
 vi.mock("@/lib/hooks/evals", () => ({
-  useCreateEvalFromFinding: () => ({ mutate: mutateMock, isPending: false }),
+  useCreateEvalFromFinding: () => ({ mutate: mutateMock, isPending: false, isSuccess: false }),
+}));
+vi.mock("@/lib/toast", () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), toast: vi.fn() }),
 }));
 
 afterEach(() => {
@@ -79,7 +82,10 @@ describe("FindingCard — Turn into eval case (AC-12)", () => {
     const btn = screen.getByText("Turn into eval case");
     expect(btn).toBeInTheDocument();
     fireEvent.click(btn);
-    expect(mutateMock).toHaveBeenCalledWith({ findingId: "f1" });
+    expect(mutateMock).toHaveBeenCalledWith(
+      { findingId: "f1" },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
   });
 
   it("shows the action on a DISMISSED finding and posts the finding id on click", () => {
@@ -89,7 +95,10 @@ describe("FindingCard — Turn into eval case (AC-12)", () => {
     const btn = screen.getByText("Turn into eval case");
     expect(btn).toBeInTheDocument();
     fireEvent.click(btn);
-    expect(mutateMock).toHaveBeenCalledWith({ findingId: "f1" });
+    expect(mutateMock).toHaveBeenCalledWith(
+      { findingId: "f1" },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    );
   });
 
   it("does NOT show the action on an OPEN (un-acted) finding", () => {

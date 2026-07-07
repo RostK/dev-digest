@@ -12,7 +12,13 @@ vi.mock("../../../../../../../lib/hooks/reviews", () => ({
 // FindingCard (rendered by FindingsPanel) now calls useCreateEvalFromFinding();
 // stub it so this smoke test needs no QueryClientProvider.
 vi.mock("../../../../../../../lib/hooks/evals", () => ({
-  useCreateEvalFromFinding: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateEvalFromFinding: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
+}));
+
+// FindingCard also calls useToast() for the "case created" confirmation;
+// stub it so this smoke test needs no <ToastProvider>.
+vi.mock("../../../../../../../lib/toast", () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), toast: vi.fn() }),
 }));
 
 import { FindingsPanel } from "./FindingsPanel";

@@ -1,5 +1,7 @@
 {
   "turnIntoEvalCase": "Turn into eval case",
+  "caseCreatedToast": "Eval case created — find it in the agent's Evals tab",
+  "caseCreatedLabel": "Added to evals",
   "global": {
     "title": "Eval Dashboard",
     "subtitle": "Recall / Precision / Citation across every agent's gold set",
