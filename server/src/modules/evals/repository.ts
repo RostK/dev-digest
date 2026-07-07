@@ -31,6 +31,8 @@ export interface InsertEvalCase {
   inputMeta?: unknown;
   expectedOutput: EvalExpectation;
   notes?: string | null;
+  /** Source finding for create-from-finding provenance/dedup; null for scaffolded cases. */
+  findingId?: string | null;
 }
 
 export interface InsertEvalRun {
@@ -98,7 +100,16 @@ export class EvalRepository {
 
   // ---- eval_cases ----------------------------------------------------------
 
-  async createCase(values: InsertEvalCase): Promise<EvalCaseRow> {
+  /**
+   * Insert a case. When `findingId` is set, the insert is IDEMPOTENT at the DB
+   * (`ON CONFLICT (finding_id) DO NOTHING` against `eval_cases_finding_uq`):
+   * a concurrent duplicate returns `undefined` instead of a second row — same
+   * TOCTOU-free insert-if-absent pattern as `insertBriefIfAbsent`
+   * (server/INSIGHTS.md 2026-07-03). A null findingId never conflicts
+   * (Postgres unique treats NULLs as distinct), so scaffolded cases insert
+   * unconditionally.
+   */
+  async createCase(values: InsertEvalCase): Promise<EvalCaseRow | undefined> {
     const [row] = await this.db
       .insert(t.evalCases)
       .values({
@@ -111,9 +122,20 @@ export class EvalRepository {
         inputMeta: (values.inputMeta as object | undefined) ?? null,
         expectedOutput: values.expectedOutput,
         notes: values.notes ?? null,
+        findingId: values.findingId ?? null,
       })
+      .onConflictDoNothing({ target: t.evalCases.findingId })
       .returning();
-    return row!;
+    return row;
+  }
+
+  /** The case previously derived from a finding, if any (workspace-scoped). */
+  async getCaseByFinding(workspaceId: string, findingId: string): Promise<EvalCaseRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(t.evalCases)
+      .where(and(eq(t.evalCases.workspaceId, workspaceId), eq(t.evalCases.findingId, findingId)));
+    return row;
   }
 
   /** All cases owned by a given agent, workspace-scoped. */

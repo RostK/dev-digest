@@ -180,6 +180,39 @@ d('evals module (Testcontainers pg)', () => {
     expect(expected.kind).toBe('must_not_flag');
   });
 
+  it('createCaseFromFinding is IDEMPOTENT: a repeat call returns the existing case, never a duplicate', async () => {
+    const container = makeContainer();
+    const service = new EvalService(container);
+    const { agent, review } = await seedRepoPrAndReview();
+
+    const [finding] = await pg.handle.db
+      .insert(t.findings)
+      .values({
+        reviewId: review.id,
+        file: 'src/config.ts',
+        startLine: 11,
+        endLine: 11,
+        severity: 'CRITICAL',
+        category: 'security',
+        title: 'Hardcoded Stripe secret key',
+        rationale: 'A live Stripe key is committed in source.',
+        confidence: 0.95,
+        acceptedAt: new Date(),
+      })
+      .returning();
+
+    // The UI invites repeat clicks (button state lost on remount; a stray click
+    // after a list reorder) — the same finding must map to ONE case forever.
+    const first = await service.createCaseFromFinding(workspaceId, finding!.id);
+    const second = await service.createCaseFromFinding(workspaceId, finding!.id);
+    expect(second.id).toBe(first.id);
+    expect(first.findingId).toBe(finding!.id);
+
+    const repo = new EvalRepository(pg.handle.db);
+    const cases = await repo.listCasesForAgent(workspaceId, agent.id);
+    expect(cases.filter((c) => c.findingId === finding!.id)).toHaveLength(1);
+  });
+
   // ---- AC-4 / AC-8 — runSet -------------------------------------------------
 
   it('AC-4/AC-8: runSet writes one row per case sharing group_id + agent snapshot, ' +
@@ -424,14 +457,15 @@ d('evals module (Testcontainers pg)', () => {
     'NOT a mean of per-case ratios', async () => {
     const { agent } = await seedRepoPrAndReview();
     const repo = new EvalRepository(pg.handle.db);
-    const c = await repo.createCase({
+    // No findingId → the insert can't conflict; the row is always returned.
+    const c = (await repo.createCase({
       workspaceId,
       ownerKind: 'agent',
       ownerId: agent.id,
       name: 'pooled-citation case',
       inputDiff: 'x',
       expectedOutput: { kind: 'must_find', findings: [{ file: 'a.ts', start_line: 1, end_line: 1 }] },
-    });
+    }))!;
 
     const groupId = randomUUID();
     const base = {

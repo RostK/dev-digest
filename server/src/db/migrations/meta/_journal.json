@@ -141,6 +141,13 @@
       "when": 1783414484410,
       "tag": "0019_living_gressill",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1783441339914,
+      "tag": "0020_fluffy_cyclops",
+      "breakpoints": true
     }
   ]
 }

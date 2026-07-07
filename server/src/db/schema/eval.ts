@@ -1,4 +1,15 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision, index } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  boolean,
+  jsonb,
+  timestamp,
+  doublePrecision,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
 
@@ -19,6 +30,11 @@ export const evalCases = pgTable(
     inputMeta: jsonb('input_meta'),
     expectedOutput: jsonb('expected_output'),
     notes: text('notes'),
+    // Provenance: the finding this case was derived from (create-from-finding
+    // flow). Nullable — scaffolded/manual cases have no source finding. NOT a
+    // real FK (a deleted review cascades its findings away, but the derived
+    // eval case must outlive them — it's the whole point of capturing it).
+    findingId: uuid('finding_id'),
   },
   (t) => ({
     // Supports `listCasesForAgent` (and the skill-owner equivalent): every case
@@ -26,6 +42,11 @@ export const evalCases = pgTable(
     // (polymorphic — points at either agents or skills) so Postgres would never
     // auto-index it; without this the lookup seq-scans eval_cases as it grows.
     ownerIdx: index('eval_cases_owner_idx').on(t.ownerKind, t.ownerId),
+    // One eval case per source finding — the DB-level dedup behind the
+    // idempotent create-from-finding flow (a repeat click must return the
+    // existing case, never mint a duplicate). Postgres unique treats NULLs as
+    // distinct, so cases with no source finding are unaffected.
+    findingUq: uniqueIndex('eval_cases_finding_uq').on(t.findingId),
   }),
 );
 

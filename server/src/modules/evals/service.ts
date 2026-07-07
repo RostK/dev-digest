@@ -75,6 +75,14 @@ export class EvalService {
    * time from the persisted `pr_files` patches — the same synthetic-diff
    * technique `reviews/diff-loader.ts` uses, reconstructed locally so this
    * module never imports the reviews module's repository (server/INSIGHTS.md:47).
+   *
+   * IDEMPOTENT per finding: a repeat call returns the EXISTING case instead of
+   * minting a duplicate. The UI invites repeat clicks (button state is lost on
+   * remount, and a mid-interaction list reorder once landed stray clicks here),
+   * so the same decision must never become two regression cases. Backstopped
+   * at the DB by `eval_cases_finding_uq` — the read-then-insert below has no
+   * TOCTOU window because a raced duplicate insert conflicts to `undefined`
+   * and we return the winner's row.
    */
   async createCaseFromFinding(workspaceId: string, findingId: string): Promise<EvalCaseRow> {
     const ctx = await this.repo.findingContext(workspaceId, findingId);
@@ -83,12 +91,15 @@ export class EvalService {
       throw new NotFoundError('Finding has no owning agent (summary-only review)');
     }
 
+    const existing = await this.repo.getCaseByFinding(workspaceId, findingId);
+    if (existing) return existing;
+
     const files = await this.repo.getPrFiles(ctx.prId);
     const inputDiff = buildDiffFromPrFiles(files.map((f) => ({ path: f.path, patch: f.patch })));
 
     const expectedOutput: EvalExpectation = expectationFromFinding(ctx.finding);
 
-    return this.repo.createCase({
+    const created = await this.repo.createCase({
       workspaceId,
       ownerKind: 'agent',
       ownerId: ctx.reviewAgentId,
@@ -96,7 +107,14 @@ export class EvalService {
       inputDiff,
       expectedOutput,
       notes: `Derived from finding ${ctx.finding.id} (PR ${ctx.prId}).`,
+      findingId: ctx.finding.id,
     });
+    if (created) return created;
+
+    // Lost a create race — the conflicting insert won; serve its row.
+    const winner = await this.repo.getCaseByFinding(workspaceId, findingId);
+    if (!winner) throw new NotFoundError('Eval case not found after concurrent creation');
+    return winner;
   }
 
   /**
