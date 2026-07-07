@@ -40,6 +40,9 @@ export interface InsertEvalRun {
   recall: number | null;
   precision: number | null;
   citationAccuracy: number | null;
+  /** Raw grounding counts for this case (feed the POOLED group citation_accuracy). */
+  kept: number | null;
+  dropped: number | null;
   durationMs: number | null;
   costUsd: number | null;
   /** Run-group snapshot — shared across every case's row in the same runSet call. */
@@ -179,6 +182,8 @@ export class EvalRepository {
         recall: values.recall,
         precision: values.precision,
         citationAccuracy: values.citationAccuracy,
+        kept: values.kept,
+        dropped: values.dropped,
         durationMs: values.durationMs,
         costUsd: values.costUsd,
         groupId: values.groupId,
@@ -261,7 +266,9 @@ export class EvalRepository {
         ranAt: sql<Date>`max(${t.evalRuns.ranAt})`,
         recall: sql<number | null>`avg(${t.evalRuns.recall})`,
         precision: sql<number | null>`avg(${t.evalRuns.precision})`,
-        citationAccuracy: sql<number | null>`avg(${t.evalRuns.citationAccuracy})`,
+        // AC-7: POOLED, not avg — sum(kept)/(sum(kept)+sum(dropped)); empty
+        // pool (no raw findings, or legacy rows with null counts) → 1.
+        citationAccuracy: sql<number>`case when coalesce(sum(${t.evalRuns.kept}),0) + coalesce(sum(${t.evalRuns.dropped}),0) = 0 then 1 else coalesce(sum(${t.evalRuns.kept}),0)::float8 / (coalesce(sum(${t.evalRuns.kept}),0) + coalesce(sum(${t.evalRuns.dropped}),0)) end`.mapWith(Number),
         tracesPassed: sql<number>`count(*) filter (where ${t.evalRuns.pass} is true)`.mapWith(Number),
         tracesTotal: sql<number>`count(*)`.mapWith(Number),
         costUsd: sql<number | null>`sum(${t.evalRuns.costUsd})`,
@@ -350,7 +357,9 @@ export class EvalRepository {
         agentVersion: sql<number>`max(${t.evalRuns.agentVersion})`,
         recall: sql<number | null>`avg(${t.evalRuns.recall})`,
         precision: sql<number | null>`avg(${t.evalRuns.precision})`,
-        citationAccuracy: sql<number | null>`avg(${t.evalRuns.citationAccuracy})`,
+        // AC-7: POOLED across ALL the agent's runs — sum(kept)/(sum(kept)+sum(dropped)),
+        // empty pool → 1 (matches the group-level formula above).
+        citationAccuracy: sql<number>`case when coalesce(sum(${t.evalRuns.kept}),0) + coalesce(sum(${t.evalRuns.dropped}),0) = 0 then 1 else coalesce(sum(${t.evalRuns.kept}),0)::float8 / (coalesce(sum(${t.evalRuns.kept}),0) + coalesce(sum(${t.evalRuns.dropped}),0)) end`.mapWith(Number),
         runCount: sql<number>`count(distinct ${t.evalRuns.groupId})`.mapWith(Number),
       })
       .from(t.evalRuns)

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { startPg, dockerAvailable, type PgFixture } from '../../../test/helpers/pg.js';
 import { loadConfig } from '../../platform/config.js';
 import { Container } from '../../platform/container.js';
@@ -417,6 +418,43 @@ d('evals module (Testcontainers pg)', () => {
     expect(compare.a_system_prompt).toBe(agent.systemPrompt);
     expect(compare.b_system_prompt).toBe('You are a STRICTER reviewer. Flag every secret.');
     expect(compare.a_system_prompt).not.toBe(compare.b_system_prompt);
+  });
+
+  it('AC-7: getGroupAggregate POOLS citation_accuracy (sum(kept)/sum(kept+dropped)), ' +
+    'NOT a mean of per-case ratios', async () => {
+    const { agent } = await seedRepoPrAndReview();
+    const repo = new EvalRepository(pg.handle.db);
+    const c = await repo.createCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      name: 'pooled-citation case',
+      inputDiff: 'x',
+      expectedOutput: { kind: 'must_find', findings: [{ file: 'a.ts', start_line: 1, end_line: 1 }] },
+    });
+
+    const groupId = randomUUID();
+    const base = {
+      caseId: c.id,
+      pass: true,
+      recall: 1,
+      precision: 1,
+      durationMs: 1,
+      costUsd: 0,
+      groupId,
+      agentVersion: 1,
+      systemPrompt: 'p',
+    };
+    // Two cases with UNEQUAL grounding denominators so pooled ≠ avg-of-ratios:
+    //   case 1: kept 1 / dropped 0 → per-case ratio 1.00
+    //   case 2: kept 1 / dropped 3 → per-case ratio 0.25
+    await repo.insertRun({ ...base, citationAccuracy: 1, kept: 1, dropped: 0 });
+    await repo.insertRun({ ...base, citationAccuracy: 0.25, kept: 1, dropped: 3 });
+
+    const agg = await repo.getGroupAggregate(workspaceId, groupId);
+    // Pooled: (1+1) / ((1+1)+(0+3)) = 2/5 = 0.4. A mean of the ratios would be 0.625.
+    expect(agg?.citationAccuracy).toBeCloseTo(0.4, 5);
+    expect(agg?.citationAccuracy).not.toBeCloseTo(0.625, 3);
   });
 
   it('AC-18: the global dashboard reads recent runs + a per-agent summary rollup ' +

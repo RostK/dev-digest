@@ -134,6 +134,13 @@
       "when": 1783367293492,
       "tag": "0018_small_shadowcat",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783414484410,
+      "tag": "0019_living_gressill",
+      "breakpoints": true
     }
   ]
 }

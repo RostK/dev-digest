@@ -42,6 +42,14 @@ export const evalRuns = pgTable(
     recall: doublePrecision('recall'),
     precision: doublePrecision('precision'),
     citationAccuracy: doublePrecision('citation_accuracy'),
+    // Raw grounding counts for THIS case's review pass. `citation_accuracy`
+    // above is the per-case ratio kept/(kept+dropped); these columns preserve
+    // the underlying counts so the GROUP-level citation_accuracy can be POOLED
+    // (sum(kept)/sum(kept+dropped)) per AC-7 rather than averaged from the
+    // per-case ratios (a mean of ratios ≠ the pooled ratio when denominators
+    // differ). Nullable: legacy/pre-0019 rows have no counts.
+    kept: integer('kept'),
+    dropped: integer('dropped'),
     durationMs: integer('duration_ms'),
     costUsd: doublePrecision('cost_usd'),
     // SPEC-05 T3 — one "run group" = a full eval-suite execution against a

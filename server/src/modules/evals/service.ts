@@ -174,6 +174,8 @@ export class EvalService {
         precision: caseScore.precision_case,
         citationAccuracy:
           caseScore.kept + caseScore.dropped === 0 ? 1 : caseScore.kept / (caseScore.kept + caseScore.dropped),
+        kept: caseScore.kept,
+        dropped: caseScore.dropped,
         durationMs,
         costUsd: outcome.costUsd,
         groupId,
