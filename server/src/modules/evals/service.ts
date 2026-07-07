@@ -11,7 +11,7 @@ import type {
 import { EvalExpectation as EvalExpectationSchema } from '@devdigest/shared';
 import { reviewPullRequest } from '@devdigest/reviewer-core';
 import type { Container } from '../../platform/container.js';
-import { NotFoundError } from '../../platform/errors.js';
+import { AppError, NotFoundError } from '../../platform/errors.js';
 import {
   DASHBOARD_ALERT_DROP_THRESHOLD,
   DASHBOARD_RECENT_RUNS_LIMIT,
@@ -161,7 +161,9 @@ export class EvalService {
     const perCase = await mapWithConcurrency(
       cases,
       EVAL_RUN_CONCURRENCY,
-      async (c): Promise<{ outcome: CaseRunOutcome; caseScore: CaseScoreResult | null }> => {
+      async (
+        c,
+      ): Promise<{ outcome: CaseRunOutcome; caseScore: CaseScoreResult | null; runtimeFailure?: boolean }> => {
         // AC-16 — never send an empty/missing diff to the engine.
         if (!c.inputDiff || c.inputDiff.trim().length === 0) {
           return { outcome: { caseId: c.id, skipped: true, reason: 'empty or missing input_diff' }, caseScore: null };
@@ -229,7 +231,10 @@ export class EvalService {
           return { outcome: { caseId: c.id, skipped: false, run }, caseScore };
         } catch (err) {
           const reason = err instanceof Error ? err.message : 'review failed';
-          return { outcome: { caseId: c.id, skipped: true, reason }, caseScore: null };
+          // runtimeFailure marks a case that WAS valid but whose review call
+          // failed (provider error / timeout) — distinct from the pre-flight
+          // AC-16 skips above, which are case-data problems.
+          return { outcome: { caseId: c.id, skipped: true, reason }, caseScore: null, runtimeFailure: true };
         }
       },
     );
@@ -238,6 +243,30 @@ export class EvalService {
     const caseResults: CaseScoreResult[] = perCase
       .map((p) => p.caseScore)
       .filter((s): s is CaseScoreResult => s !== null);
+
+    // A run where every review CALL failed and nothing scored is a failed run,
+    // not an empty success. Returning 200 with an all-zero aggregate here made
+    // the UI look like the button did nothing (seen live: a dead OpenRouter key
+    // 403'd all 10 cases in ~600ms, each caught by the fail-soft catch above,
+    // zero rows written, no error surfaced anywhere). Fail loudly with the
+    // dominant reason so the client can show WHY. AC-16 semantics are
+    // untouched: pre-flight skips (empty diff, off-schema expectation) are
+    // case-DATA problems and still return normally — this throws only when at
+    // least one valid case's review failed at runtime and zero cases scored.
+    if (caseResults.length === 0) {
+      const failed = perCase.filter((p) => p.runtimeFailure);
+      if (failed.length > 0) {
+        const reasons = [
+          ...new Set(failed.map((p) => (p.outcome.skipped ? p.outcome.reason : null)).filter((r): r is string => r !== null)),
+        ];
+        throw new AppError(
+          'eval_run_all_failed',
+          `Eval run produced no results: all ${failed.length} runnable case(s) failed — ${reasons[0] ?? 'unknown reason'}`,
+          502,
+          { reasons },
+        );
+      }
+    }
 
     const aggregate = aggregateRun(caseResults);
 

@@ -5,7 +5,7 @@ import { loadConfig } from '../../platform/config.js';
 import { Container } from '../../platform/container.js';
 import { MockLLMProvider } from '../../adapters/mocks.js';
 import * as t from '../../db/schema.js';
-import type { Review } from '@devdigest/shared';
+import type { Review, StructuredRequest, StructuredResult } from '@devdigest/shared';
 import { EvalService } from './service.js';
 import { EvalRepository } from './repository.js';
 
@@ -342,6 +342,39 @@ d('evals module (Testcontainers pg)', () => {
     }
   });
 
+  it('a run where EVERY review call fails throws a visible error, not an empty success', async () => {
+    // Provider dies at runtime (e.g. an exhausted OpenRouter key 403s every
+    // call). Distinct from the AC-16 pre-flight skips above: those are
+    // case-data problems and still return normally; this is the RUN failing.
+    // Before the fix this returned 200 with an all-zero aggregate in ~600ms and
+    // the UI's Run button read as a dead no-op.
+    class FailingLLMProvider extends MockLLMProvider {
+      override async completeStructured(): Promise<never> {
+        throw new Error('403 Key limit exceeded (monthly limit)');
+      }
+    }
+    const container = new Container(config(), pg.handle.db, {
+      llm: { openai: new FailingLLMProvider('openai') },
+    });
+    const service = new EvalService(container);
+    const { agent } = await seedRepoPrAndReview();
+
+    const repo = new EvalRepository(pg.handle.db);
+    await repo.createCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agent.id,
+      name: 'provider-failure case',
+      inputDiff: `diff --git a/src/config.ts b/src/config.ts\n--- a/src/config.ts\n+++ b/src/config.ts\n${PATCH}`,
+      expectedOutput: {
+        kind: 'must_find',
+        findings: [{ file: 'src/config.ts', start_line: 11, end_line: 11 }],
+      },
+    });
+
+    await expect(service.runSet(workspaceId, agent.id)).rejects.toThrow(/Key limit exceeded/);
+  });
+
   // ---- T4 — AC-10 dashboard, AC-11 compare, AC-18 global read --------------
 
   it('AC-10: the dashboard reflects metrics after 2 runs (current + delta + trend + recent_runs), ' +
@@ -526,14 +559,21 @@ d('evals module (Testcontainers pg)', () => {
 
   it('fails-soft: a case whose review THROWS is recorded as skipped and the run ' +
     'still completes (never aborts the whole set)', async () => {
-    // A provider that always throws on the structured review call.
-    class ThrowingLLM extends MockLLMProvider {
-      override async completeStructured<T>(): Promise<never> {
-        throw new Error('simulated provider outage');
+    // A provider that throws for ONE case (matched by the task framing, which
+    // carries the case name) and succeeds for its sibling — the isolation this
+    // test exists to prove. The all-cases-fail variant now THROWS by design
+    // (see the "every review call fails" test above): a run that produced no
+    // data must be a visible failure, not an empty success.
+    class FlakyLLM extends MockLLMProvider {
+      override async completeStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {
+        if (JSON.stringify(req).includes('flaky case 1')) {
+          throw new Error('simulated provider outage');
+        }
+        return super.completeStructured(req);
       }
     }
     const container = new Container(config(), pg.handle.db, {
-      llm: { openai: new ThrowingLLM('openai', {}) },
+      llm: { openai: new FlakyLLM('openai', { structured: REVIEW_FIXTURE }) },
     });
     const service = new EvalService(container);
     const { agent } = await seedRepoPrAndReview();
@@ -550,13 +590,17 @@ d('evals module (Testcontainers pg)', () => {
       });
     }
 
-    // The run RESOLVES (does not throw) even though every review errored.
+    // The run RESOLVES: the throwing case is skipped, the sibling completes.
     const result = await service.runSet(workspaceId, agent.id);
-    expect(result.cases_run).toBe(0);
-    expect(result.cases_skipped).toBe(2);
-    expect(result.outcomes.every((o) => o.skipped)).toBe(true);
-    // No rows were written for the errored cases.
-    expect(await repo.countRunsInGroup(workspaceId, result.group_id)).toBe(0);
+    expect(result.cases_run).toBe(1);
+    expect(result.cases_skipped).toBe(1);
+    const skipped = result.outcomes.find((o) => o.skipped);
+    expect(skipped).toBeDefined();
+    if (skipped?.skipped) {
+      expect(skipped.reason).toMatch(/outage/);
+    }
+    // Exactly one row written — the completed sibling's.
+    expect(await repo.countRunsInGroup(workspaceId, result.group_id)).toBe(1);
   });
 
   it('AC-18: the global dashboard reads recent runs + a per-agent summary rollup ' +

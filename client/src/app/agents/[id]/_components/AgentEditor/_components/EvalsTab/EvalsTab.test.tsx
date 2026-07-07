@@ -61,6 +61,12 @@ vi.mock("@/lib/hooks/evals", () => ({
   useEvalRunProgress: () => ({ data: progressData }),
 }));
 
+// EvalsTab now calls useToast() for the run-failed toast; stub it so this
+// smoke test needs no <ToastProvider>.
+vi.mock("@/lib/toast", () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), toast: vi.fn() }),
+}));
+
 import { EvalsTab } from "./EvalsTab";
 
 afterEach(() => {
@@ -109,10 +115,14 @@ describe("Agent Editor Evals tab (T8)", () => {
     expect(screen.queryByText(/Add at least 8 cases/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Run all"));
-    expect(runSetMutate).toHaveBeenCalledWith({
-      agentId: "ag1",
-      runId: expect.any(String),
-    });
+    expect(runSetMutate).toHaveBeenCalledWith(
+      {
+        agentId: "ag1",
+        runId: expect.any(String),
+      },
+      // The runFailed toast rides on the mutation's onError callback.
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
   });
 
   it("shows a running state + per-case progress while the eval set mutation is pending", () => {

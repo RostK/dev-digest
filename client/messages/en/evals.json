@@ -85,6 +85,7 @@
     "statusPass": "Pass",
     "statusFail": "Fail",
     "statusNeverRun": "Never run",
-    "runSummary": "{passed}/{total} cases passed on the last run"
+    "runSummary": "{passed}/{total} cases passed on the last run",
+    "runFailed": "Eval run failed: {message}"
   }
 }

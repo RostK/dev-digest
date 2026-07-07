@@ -11,6 +11,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Badge, Button, EmptyState, PercentProgress, SectionLabel } from "@devdigest/ui";
 import { useAgentEvalCases, useEvalRunProgress, useRunEvalSet } from "@/lib/hooks/evals";
+import { useToast } from "@/lib/toast";
 import { s } from "./styles";
 
 const MIN_CASES_FOR_SIGNAL = 8;
@@ -33,6 +34,7 @@ function CaseStatusBadge({ lastRunPass }: { lastRunPass: boolean | null }) {
 
 export function EvalsTab({ agentId }: { agentId: string }) {
   const t = useTranslations("evals");
+  const toast = useToast();
   const casesQ = useAgentEvalCases(agentId);
   const runSet = useRunEvalSet();
   const [runId, setRunId] = React.useState<string | null>(null);
@@ -48,7 +50,16 @@ export function EvalsTab({ agentId }: { agentId: string }) {
     // while the (long) run request is still in flight.
     const id = crypto.randomUUID();
     setRunId(id);
-    runSet.mutate({ agentId, runId: id });
+    runSet.mutate(
+      { agentId, runId: id },
+      {
+        // A failed run must be VISIBLE — before this, an error (e.g. the server's
+        // 502 "all cases skipped: provider key exhausted") only stopped the
+        // spinner and the button read as a dead no-op.
+        onError: (err) =>
+          toast.error(t("evalsTab.runFailed", { message: err instanceof Error ? err.message : String(err) })),
+      },
+    );
   }
 
   return (
