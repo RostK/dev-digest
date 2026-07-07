@@ -9,6 +9,13 @@
 export const EVAL_MODEL = process.env.EVAL_MODEL ?? "claude-haiku-4-5";
 export const EVAL_JUDGE_MODEL = process.env.EVAL_JUDGE_MODEL ?? "claude-sonnet-5";
 export const MAX_TURNS = Number(process.env.EVAL_MAX_TURNS ?? "8");
+// Hard per-request output-token ceiling for BOTH runtimes (Agent SDK sessions via
+// CLAUDE_CODE_MAX_OUTPUT_TOKENS, direct chat.completions via max_tokens). Without it the
+// Agent SDK requests up to 64k output tokens per call — on a metered key that's the
+// worst-case cost of every single call, and a near-empty key 402s the whole request
+// ("requires more credits, or fewer max_tokens"). Eval outputs are small (a review,
+// a report, a judge verdict); 8k is generous headroom.
+export const EVAL_MAX_OUTPUT_TOKENS = Number(process.env.EVAL_MAX_OUTPUT_TOKENS ?? "8192");
 
 // --- Configuration tag ------------------------------------------------------
 // "candidate" = artifact injected (normal). "baseline" = no artifact (benchmark lift baseline).

@@ -12,7 +12,7 @@
  */
 
 import OpenAI from "openai";
-import { EVAL_MODEL } from "../config.js";
+import { EVAL_MODEL, EVAL_MAX_OUTPUT_TOKENS } from "../config.js";
 import type { Result, RunOptions } from "./run-claude.js";
 
 const BASE_URL = (process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1").replace(/\/$/, "");
@@ -39,6 +39,9 @@ export async function runOpenRouter(prompt: string, opts: RunOptions = {}): Prom
     const res = await client.chat.completions.create({
       model: opts.model ?? EVAL_MODEL,
       temperature: 0,
+      // Same per-request output ceiling as the Agent SDK runtime (see config.ts) —
+      // without it the gateway reserves the model's max and a low-credit key 402s.
+      max_tokens: EVAL_MAX_OUTPUT_TOKENS,
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
