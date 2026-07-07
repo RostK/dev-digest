@@ -11,11 +11,13 @@ import { EvalService } from './service.js';
  *  `createCaseFromFinding`. Matches the committed client hook's contract. */
 const FromFindingBody = z.object({ finding_id: z.string().uuid() });
 
-/** `GET /evals/compare?a=&b=` — both are eval run-group ids (not uuids —
- *  `randomUUID()`-generated but not tied to a table row, so validate as a
- *  non-empty string rather than `.uuid()` to avoid over-constraining a
- *  value-object id). */
-const CompareQuery = z.object({ a: z.string().min(1), b: z.string().min(1) });
+/** `GET /evals/compare?a=&b=` — both are eval run-group ids. A group id is a
+ *  `randomUUID()` stored in the `eval_runs.group_id` UUID column, so it is
+ *  always a well-formed UUID. Validating as `.uuid()` rejects a malformed id
+ *  with a clean 422 up front — without it, a non-UUID string reaches the
+ *  repository query and Postgres raises `invalid input syntax for type uuid`,
+ *  surfacing as an opaque 500 (a valid-but-unknown id still 404s downstream). */
+const CompareQuery = z.object({ a: z.string().uuid(), b: z.string().uuid() });
 
 /**
  * evals module (SPEC-05 T4 — read side + routes; write side/schema/scorer are
