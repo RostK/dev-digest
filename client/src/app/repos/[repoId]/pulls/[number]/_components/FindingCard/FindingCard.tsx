@@ -55,8 +55,8 @@ export function FindingCard({
   const createEvalCase = useCreateEvalFromFinding();
 
   return (
-    <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
-      <div onClick={() => setExpanded((e) => !e)} style={s.header}>
+    <div data-finding-id={f.id} style={s.card(!!focused, sevColor)}>
+      <div onClick={() => setExpanded((e) => !e)} style={s.header(muted)}>
         <div style={s.badgeWrap}>
           <SeverityBadge severity={f.severity as Severity} compact />
         </div>
@@ -79,17 +79,19 @@ export function FindingCard({
 
       {expanded && (
         <div style={s.body}>
-          <div style={s.prose}>
-            <Markdown>{f.rationale}</Markdown>
-          </div>
-          {f.suggestion && (
-            <div style={s.suggestionWrap}>
-              <div style={s.suggestionLabel}>{t("finding.suggestedFix")}</div>
-              <div style={s.prose}>
-                <Markdown>{f.suggestion}</Markdown>
-              </div>
+          <div style={s.dim(muted)}>
+            <div style={s.prose}>
+              <Markdown>{f.rationale}</Markdown>
             </div>
-          )}
+            {f.suggestion && (
+              <div style={s.suggestionWrap}>
+                <div style={s.suggestionLabel}>{t("finding.suggestedFix")}</div>
+                <div style={s.prose}>
+                  <Markdown>{f.suggestion}</Markdown>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div style={s.actions}>
             <Button
