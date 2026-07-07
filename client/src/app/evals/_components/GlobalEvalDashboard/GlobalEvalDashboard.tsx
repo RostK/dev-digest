@@ -11,11 +11,8 @@ import { useTranslations } from "next-intl";
 import { Icon, Skeleton, ErrorState, EmptyState, SectionLabel } from "@devdigest/ui";
 import { useGlobalEvalDashboard } from "@/lib/hooks/evals";
 import { formatCostCompact } from "@/components/RunCostBadge";
+import { pct } from "@/app/evals/helpers";
 import { s } from "./styles";
-
-function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
-}
 
 export function GlobalEvalDashboard() {
   const t = useTranslations("evals");

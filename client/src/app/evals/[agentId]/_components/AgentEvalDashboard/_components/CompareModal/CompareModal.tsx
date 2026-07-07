@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 import { Modal, Icon, Skeleton, ErrorState } from "@devdigest/ui";
 import { useEvalCompare } from "@/lib/hooks/evals";
 import { formatCostCompact } from "@/components/RunCostBadge";
+import { pct } from "@/app/evals/helpers";
 import { s } from "./styles";
 
 type T = ReturnType<typeof useTranslations>;
@@ -18,10 +19,6 @@ interface CompareModalProps {
   groupA: string;
   groupB: string;
   onClose: () => void;
-}
-
-function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
 }
 
 /** Delta direction as icon + word, never color alone. `higherIsBetter` flips

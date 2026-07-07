@@ -12,12 +12,9 @@ import { Icon, Skeleton, ErrorState, EmptyState, SectionLabel, Button, Checkbox 
 import { LineChart, MetricCard } from "@devdigest/ui";
 import { useAgentEvalDashboard, useAgentEvalRuns } from "@/lib/hooks/evals";
 import { formatCostCompact } from "@/components/RunCostBadge";
+import { pct } from "@/app/evals/helpers";
 import { CompareModal } from "./_components/CompareModal";
 import { s } from "./styles";
-
-function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
-}
 
 export function AgentEvalDashboard({ agentId }: { agentId: string }) {
   const t = useTranslations("evals");
