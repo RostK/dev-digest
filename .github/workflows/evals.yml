@@ -1,21 +1,20 @@
-# Harness evals on CI.
+# Harness evals on CI — MANUAL-ONLY.
 #
 # WHAT IT DOES
-# On a pull request that touches a skill, an agent, CLAUDE.md, or the eval engine, this workflow
-# runs ONLY the evals that the change implicates (evals/scripts/ci-detect.mjs decides which):
+# Runs the evals/ harness suites against OpenRouter, ONLY when a human triggers it from the
+# Actions "Run workflow" dialog (workflow_dispatch). There is deliberately NO pull_request
+# trigger: every eval suite costs real OpenRouter credit, and the previous per-push gate re-ran
+# ALL implicated suites on EVERY push to an eval-touching PR — ~$10 burned in one review cycle
+# (2026-07-07), twice exhausting the capped key so hard that even unrelated checks 402/403-failed.
+# Evals are now an on-demand tool: run them after changing a skill, an agent, CLAUDE.md, or the
+# eval engine, and before merging such a PR.
 #
-#   .claude/skills/<name>/**      → run evals/skills/<name>     (content tier — cheap, no proxy)
-#   .claude/agents/<name>.md      → run evals/agents/<name>     (tool tier)
+# A manual run executes EVERY suite that exists on the selected ref:
+#   evals/skills/<name>/   → skill (content) tier — cheap, no proxy
+#   evals/agents/<name>/   → agent (tool) tier
+#   evals/workflow/        → workflow tier (live harness; advisory, continue-on-error)
 #
-# The WORKFLOW tier (live harness: subagent dispatch, skill activation, CLAUDE.md routing) runs
-# ONLY on a manual workflow_dispatch — never per PR push. It is the most expensive tier (a full
-# run costs real OpenRouter credit and can exhaust a capped key mid-PR-cycle, 402/403-failing the
-# OTHER tiers too) and the flakiest (cheap-model dependent), so per-push it produced red-X noise
-# without gating anything. Trigger it from the Actions "Run workflow" dialog when an agent /
-# CLAUDE.md / engine change warrants a live-harness check.
-#
-# A changed skill/agent that has NO written evals is NOT a failure — it is printed as
-# "SKIP <name> (no evals)" in the detect step's log and job summary, and simply not tested.
+# (evals/scripts/ci-detect.mjs — the old diff→suites mapper — remains for local use.)
 #
 # MODELS — everything runs on OpenRouter (EVAL_BACKEND=openrouter). No app UI: the model is a job
 # parameter, editable in each job's `env:` block below or overridable per-run from the Actions
@@ -31,14 +30,6 @@
 name: harness evals
 
 on:
-  pull_request:
-    paths:
-      - '.claude/skills/**'
-      - '.claude/agents/**'
-      - 'CLAUDE.md'
-      - '.claude/CLAUDE.md'
-      - 'evals/**'
-      - '.github/workflows/evals.yml'
   workflow_dispatch:
     inputs:
       skills_model:
@@ -65,9 +56,9 @@ env:
   EVAL_BACKEND: openrouter
 
 jobs:
-  # ── 1. Decide which suites this diff implicates ──────────────────────────────
+  # ── 1. Enumerate every suite that exists on this ref ─────────────────────────
   detect:
-    name: detect changed artifacts
+    name: enumerate eval suites
     runs-on: ubuntu-latest
     outputs:
       skills: ${{ steps.detect.outputs.skills }}
@@ -75,56 +66,47 @@ jobs:
       run_workflow: ${{ steps.detect.outputs.run_workflow }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # need the PR base commit to diff against
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Compute changed files
-        id: changed
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base='${{ github.event.pull_request.base.sha }}'
-            head='${{ github.event.pull_request.head.sha }}'
-          else
-            base="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
-            head="$(git rev-parse HEAD)"
-          fi
-          echo "Diffing $base...$head"
-          {
-            echo 'files<<__EOF__'
-            git diff --name-only "$base" "$head"
-            echo '__EOF__'
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Map changes → suites
+      - name: Enumerate eval suites
         id: detect
         working-directory: evals
-        env:
-          CHANGED_FILES: ${{ steps.changed.outputs.files }}
-        run: node scripts/ci-detect.mjs
+        # A manual run means "check everything now" — list every suite directory
+        # rather than diffing anything. A dir without an .eval.ts simply has no
+        # tests for vitest to collect, so listing dirs IS the has-evals check.
+        run: |
+          list_dirs() {
+            node -e "
+              const fs = require('fs');
+              const dir = process.argv[1];
+              const names = fs.existsSync(dir)
+                ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
+                : [];
+              process.stdout.write(JSON.stringify(names));
+            " "$1"
+          }
+          skills=$(list_dirs skills)
+          agents=$(list_dirs agents)
+          echo "skills=$skills" >> "$GITHUB_OUTPUT"
+          echo "agents=$agents" >> "$GITHUB_OUTPUT"
+          if [ -d workflow ]; then echo "run_workflow=true" >> "$GITHUB_OUTPUT"; else echo "run_workflow=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Job summary
         if: always()
-        # Pass detector outputs via env (safe quoting) and use `if` blocks — the `[ -n "" ] && echo`
-        # idiom returns exit 1 when a value is empty, which trips bash `set -e` and fails the step.
         env:
           SKILLS: ${{ steps.detect.outputs.skills }}
           AGENTS: ${{ steps.detect.outputs.agents }}
           RUN_WORKFLOW: ${{ steps.detect.outputs.run_workflow }}
-          SKIPPED_SKILLS: ${{ steps.detect.outputs.skipped_skills }}
-          SKIPPED_AGENTS: ${{ steps.detect.outputs.skipped_agents }}
         run: |
           {
-            echo '### Harness eval selection'
+            echo '### Harness eval suites (manual run — everything on this ref)'
             echo ''
-            echo "- skills → run: \`${SKILLS}\`"
-            echo "- agents → run: \`${AGENTS}\`"
+            echo "- skills: \`${SKILLS}\`"
+            echo "- agents: \`${AGENTS}\`"
             echo "- workflow tier: \`${RUN_WORKFLOW}\`"
-            if [ -n "$SKIPPED_SKILLS" ]; then echo "- SKIP skills (no evals): \`${SKIPPED_SKILLS}\`"; fi
-            if [ -n "$SKIPPED_AGENTS" ]; then echo "- SKIP agents (no evals): \`${SKIPPED_AGENTS}\`"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── 2. Skill (content) tier — cheap DeepSeek, direct OpenRouter, no proxy ────
@@ -188,18 +170,16 @@ jobs:
         run: pnpm exec vitest run "agents/${{ matrix.agent }}/"
 
   # ── 4. Workflow tier — live harness on Claude Haiku via the Anthropic Skin (no proxy) ──
-  # MANUAL-ONLY (workflow_dispatch) + ADVISORY (continue-on-error): this tier drives the REAL
-  # harness (subagent dispatch, skill activation, CLAUDE.md routing) in a live session, so it is
-  # inherently the flakiest, most model-dependent, and most expensive tier — a per-PR run burned
-  # real credit on every push and its red X read as a PR failure while gating nothing. It also
-  # carries a deliberate cheap-model canary — the engineering-insights DESCRIPTION-activation
-  # case, which the skill's own SKILL.md documents as unreliable without its Stop hook and which
-  # a cheap model won't self-invoke. Trigger it from the Actions "Run workflow" dialog. The
-  # skills + agents tiers stay hard per-PR gates.
+  # ADVISORY (continue-on-error): this tier drives the REAL harness (subagent dispatch, skill
+  # activation, CLAUDE.md routing) in a live session, so it is inherently the flakiest, most
+  # model-dependent, and most expensive tier. It also carries a deliberate cheap-model canary —
+  # the engineering-insights DESCRIPTION-activation case, which the skill's own SKILL.md documents
+  # as unreliable without its Stop hook and which a cheap model won't self-invoke. Its result
+  # REPORTS but never fails the run.
   workflow:
     name: workflow tier (advisory)
     needs: detect
-    if: github.event_name == 'workflow_dispatch'
+    if: needs.detect.outputs.run_workflow == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
