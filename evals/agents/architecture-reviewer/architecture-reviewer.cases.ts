@@ -24,6 +24,13 @@ ${fx("reviewer-core-gate.diff")}`;
 // surfaces the COST of relaxing the citation rule: freed from "every finding must name a
 // documented contract", the lite variant is more prone to fabricating a judgment/best-practice
 // finding where the strict variant stays silent.
+//
+// GROUNDING CONSTRAINT: the fixture's `-` lines must match the REAL current content of the file
+// it patches (blast/mapper.ts caller loop) — the agent explores the repo, and a diff against a
+// phantom file or stale content gives it a legitimate reason to answer "Cannot audit" instead of
+// Approve (seen twice: a fixture-only score.ts whose `summarize` export collided with the real
+// blast/summary.ts export, then a score.ts that didn't exist at all). If mapper.ts's caller loop
+// changes, regenerate this fixture from the real file.
 const BENIGN_PROMPT = `Audit this diff against DevDigest's documented structural contracts.
 
 ${fx("benign-refactor.diff")}`;

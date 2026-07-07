@@ -1,16 +1,29 @@
-diff --git a/server/src/modules/blast/score.ts b/server/src/modules/blast/score.ts
+diff --git a/server/src/modules/blast/mapper.ts b/server/src/modules/blast/mapper.ts
 index eeeeeee..fffffff 100644
---- a/server/src/modules/blast/score.ts
-+++ b/server/src/modules/blast/score.ts
-@@ -1,10 +1,12 @@
- export interface BlastRow {
-   id: string;
-   score: number;
- }
+--- a/server/src/modules/blast/mapper.ts
++++ b/server/src/modules/blast/mapper.ts
+@@ -31,17 +31,17 @@ export function mapToBlastRadius(result: BlastResult, summary: string): BlastRadius {
+   const callersByVia = new Map<string, BlastCaller[]>();
+   const filesByVia = new Map<string, Set<string>>();
+-  for (const c of result.callers) {
+-    let callers = callersByVia.get(c.viaSymbol);
++  for (const caller of result.callers) {
++    let callers = callersByVia.get(caller.viaSymbol);
+     if (!callers) {
+       callers = [];
+-      callersByVia.set(c.viaSymbol, callers);
++      callersByVia.set(caller.viaSymbol, callers);
+     }
+-    callers.push({ name: c.symbol, file: c.file, line: c.line });
++    callers.push({ name: caller.symbol, file: caller.file, line: caller.line });
 
--export function scoreRows(rows: BlastRow[]) {
--  return rows.map((r) => ({ id: r.id, score: r.score }));
-+// Renamed locals for readability; behaviour unchanged.
-+export function scoreRows(rows: BlastRow[]) {
-+  return rows.map((row) => ({ id: row.id, score: row.score }));
- }
+-    let files = filesByVia.get(c.viaSymbol);
++    let files = filesByVia.get(caller.viaSymbol);
+     if (!files) {
+       files = new Set<string>();
+-      filesByVia.set(c.viaSymbol, files);
++      filesByVia.set(caller.viaSymbol, files);
+     }
+-    files.add(c.file);
++    files.add(caller.file);
+   }
