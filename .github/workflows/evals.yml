@@ -5,9 +5,14 @@
 # runs ONLY the evals that the change implicates (evals/scripts/ci-detect.mjs decides which):
 #
 #   .claude/skills/<name>/**      → run evals/skills/<name>     (content tier — cheap, no proxy)
-#   .claude/agents/<name>.md      → run evals/agents/<name>     (tool tier)  + the workflow tier
-#   CLAUDE.md / .claude/CLAUDE.md → run the workflow tier
-#   evals/src/**  (engine change) → run the workflow tier
+#   .claude/agents/<name>.md      → run evals/agents/<name>     (tool tier)
+#
+# The WORKFLOW tier (live harness: subagent dispatch, skill activation, CLAUDE.md routing) runs
+# ONLY on a manual workflow_dispatch — never per PR push. It is the most expensive tier (a full
+# run costs real OpenRouter credit and can exhaust a capped key mid-PR-cycle, 402/403-failing the
+# OTHER tiers too) and the flakiest (cheap-model dependent), so per-push it produced red-X noise
+# without gating anything. Trigger it from the Actions "Run workflow" dialog when an agent /
+# CLAUDE.md / engine change warrants a live-harness check.
 #
 # A changed skill/agent that has NO written evals is NOT a failure — it is printed as
 # "SKIP <name> (no evals)" in the detect step's log and job summary, and simply not tested.
@@ -183,16 +188,18 @@ jobs:
         run: pnpm exec vitest run "agents/${{ matrix.agent }}/"
 
   # ── 4. Workflow tier — live harness on Claude Haiku via the Anthropic Skin (no proxy) ──
-  # ADVISORY (continue-on-error): this tier drives the REAL harness (subagent dispatch, skill
-  # activation, CLAUDE.md routing) in a live session, so it is inherently the flakiest and most
-  # model-dependent tier. It also carries a deliberate cheap-model canary — the engineering-insights
-  # DESCRIPTION-activation case, which the skill's own SKILL.md documents as unreliable without its
-  # Stop hook and which a cheap model won't self-invoke. So its results REPORT (in the job log) but
-  # do NOT block the PR. The skills + agents tiers stay hard gates.
+  # MANUAL-ONLY (workflow_dispatch) + ADVISORY (continue-on-error): this tier drives the REAL
+  # harness (subagent dispatch, skill activation, CLAUDE.md routing) in a live session, so it is
+  # inherently the flakiest, most model-dependent, and most expensive tier — a per-PR run burned
+  # real credit on every push and its red X read as a PR failure while gating nothing. It also
+  # carries a deliberate cheap-model canary — the engineering-insights DESCRIPTION-activation
+  # case, which the skill's own SKILL.md documents as unreliable without its Stop hook and which
+  # a cheap model won't self-invoke. Trigger it from the Actions "Run workflow" dialog. The
+  # skills + agents tiers stay hard per-PR gates.
   workflow:
     name: workflow tier (advisory)
     needs: detect
-    if: needs.detect.outputs.run_workflow == 'true'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     continue-on-error: true
     env:
