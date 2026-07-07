@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { EvalExpectation, Finding, UnifiedDiff } from '@devdigest/shared';
+import type { EvalExpectation, Finding } from '@devdigest/shared';
 import { aggregateRun, scoreCase } from './scoring.js';
 import goodOutcome from './__fixtures__/good-prompt.outcome.json' with { type: 'json' };
 import brokenOutcome from './__fixtures__/broken-prompt.outcome.json' with { type: 'json' };
@@ -33,27 +33,6 @@ import brokenOutcome from './__fixtures__/broken-prompt.outcome.json' with { typ
  *     (precision 0).
  */
 
-const diff: UnifiedDiff = {
-  raw: '',
-  files: [
-    {
-      path: 'src/routes/files.ts',
-      additions: 15,
-      deletions: 0,
-      hunks: [
-        {
-          file: 'src/routes/files.ts',
-          oldStart: 1,
-          oldLines: 0,
-          newStart: 1,
-          newLines: 15,
-          newLineNumbers: Array.from({ length: 15 }, (_, i) => i + 1),
-        },
-      ],
-    },
-  ],
-};
-
 const mustFindCase: EvalExpectation = {
   kind: 'must_find',
   findings: [{ file: 'src/routes/files.ts', start_line: 12, end_line: 14 }],
@@ -76,7 +55,6 @@ describe('scoring-fixtures (AC-9 prompt sensitivity)', () => {
       expectation: mustFindCase,
       produced,
       dropped: goodOutcome.must_find.dropped.length,
-      diff,
     });
 
     expect(result.recall_case).toBe(1);
@@ -91,7 +69,6 @@ describe('scoring-fixtures (AC-9 prompt sensitivity)', () => {
       expectation: mustNotFlagCase,
       produced,
       dropped: goodOutcome.must_not_flag.dropped.length,
-      diff,
     });
 
     expect(result.recall_case).toBeNull();
@@ -106,7 +83,6 @@ describe('scoring-fixtures (AC-9 prompt sensitivity)', () => {
       expectation: mustFindCase,
       produced,
       dropped: brokenOutcome.must_find.dropped.length,
-      diff,
     });
 
     expect(result.recall_case).toBe(0);
@@ -121,7 +97,6 @@ describe('scoring-fixtures (AC-9 prompt sensitivity)', () => {
       expectation: mustNotFlagCase,
       produced,
       dropped: brokenOutcome.must_not_flag.dropped.length,
-      diff,
     });
 
     expect(result.recall_case).toBeNull();
@@ -135,13 +110,11 @@ describe('scoring-fixtures (AC-9 prompt sensitivity)', () => {
         expectation: mustFindCase,
         produced: findings(goodOutcome.must_find),
         dropped: goodOutcome.must_find.dropped.length,
-        diff,
       }),
       scoreCase({
         expectation: mustNotFlagCase,
         produced: findings(goodOutcome.must_not_flag),
         dropped: goodOutcome.must_not_flag.dropped.length,
-        diff,
       }),
     ]);
 
@@ -150,13 +123,11 @@ describe('scoring-fixtures (AC-9 prompt sensitivity)', () => {
         expectation: mustFindCase,
         produced: findings(brokenOutcome.must_find),
         dropped: brokenOutcome.must_find.dropped.length,
-        diff,
       }),
       scoreCase({
         expectation: mustNotFlagCase,
         produced: findings(brokenOutcome.must_not_flag),
         dropped: brokenOutcome.must_not_flag.dropped.length,
-        diff,
       }),
     ]);
 

@@ -111,7 +111,10 @@ export class EvalService {
       systemPrompt: agent.systemPrompt,
       version: agent.version,
       model: agent.model,
-      strategy: agent.strategy ?? EVAL_REVIEW_STRATEGY,
+      // AC-4 + constants.ts: strategy is FORCED to single-pass for every eval
+      // run (independent of the agent's own configured strategy) so a case's
+      // score stays comparable across runs. Do NOT fall back to agent.strategy.
+      strategy: EVAL_REVIEW_STRATEGY,
     };
 
     const llm = await this.container.llm(agent.provider);
@@ -160,7 +163,6 @@ export class EvalService {
         expectation,
         produced: outcome.review.findings,
         dropped: outcome.dropped.length,
-        diff,
       });
       caseResults.push(caseScore);
 

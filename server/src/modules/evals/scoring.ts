@@ -33,8 +33,6 @@ export interface CaseScoreInput {
   produced: Finding[];
   /** Findings dropped by the engine's grounding gate for this case. */
   dropped: number;
-  /** The unified diff the case's review ran against — used to build the line index. */
-  diff: UnifiedDiff;
 }
 
 export interface CaseScoreResult {
@@ -82,20 +80,22 @@ export function dedupeExpected(findings: EvalExpectedFinding[]): EvalExpectedFin
  * per-file line-set shape the engine builds from real diff hunks, then
  * `rangeIntersects` tests the expected range against that set — identical
  * intersection semantics to how the engine grounds a finding against a hunk.
- * `diff` (the case's real diff) is accepted for interface symmetry with the
- * caller's other diff-shaped inputs; matching two already-produced/expected
- * ranges against each other does not need the case's hunks.
  */
 export function matchExpected(
   expected: EvalExpectedFinding,
   produced: Finding,
-  _diff: UnifiedDiff,
 ): boolean {
   if (expected.file !== produced.file) return false;
 
   const isFullFile = produced.kind ? FULL_FILE_KINDS.has(produced.kind) : false;
   if (isFullFile) return true;
 
+  // The Finding contract permits end_line < start_line; normalize to [lo, hi]
+  // so the synthetic hunk spans the whole range. Without this, buildLineIndex's
+  // `Math.max(oldLines, 1)` collapses an inverted range to just {start_line}
+  // and a legitimately overlapping expected range is missed.
+  const lo = Math.min(produced.start_line, produced.end_line);
+  const hi = Math.max(produced.start_line, produced.end_line);
   const producedAsDiff: UnifiedDiff = {
     raw: '',
     files: [
@@ -106,10 +106,10 @@ export function matchExpected(
         hunks: [
           {
             file: produced.file,
-            oldStart: produced.start_line,
-            oldLines: produced.end_line - produced.start_line + 1,
-            newStart: produced.start_line,
-            newLines: produced.end_line - produced.start_line + 1,
+            oldStart: lo,
+            oldLines: hi - lo + 1,
+            newStart: lo,
+            newLines: hi - lo + 1,
             newLineNumbers: [],
           },
         ],
@@ -140,7 +140,6 @@ export function scoreCase({
   expectation,
   produced,
   dropped,
-  diff,
 }: CaseScoreInput): CaseScoreResult {
   const expected = dedupeExpected(expectation.findings);
   const isMustFind = expectation.kind === 'must_find';
@@ -151,7 +150,7 @@ export function scoreCase({
       recall_case = null;
     } else {
       const matchedCount = expected.filter((exp) =>
-        produced.some((p) => matchExpected(exp, p, diff)),
+        produced.some((p) => matchExpected(exp, p)),
       ).length;
       recall_case = matchedCount / expected.length;
     }
@@ -167,7 +166,7 @@ export function scoreCase({
     precision_case = 0;
   } else {
     const matchingProduced = produced.filter((p) =>
-      expected.some((exp) => matchExpected(exp, p, diff)),
+      expected.some((exp) => matchExpected(exp, p)),
     ).length;
     precision_case = matchingProduced / produced.length;
   }
