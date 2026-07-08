@@ -40,13 +40,13 @@ export function MultiAgentPicker({
   const ref = React.useRef<HTMLDivElement>(null);
 
   const { data: agents } = useAgents();
-  const { data: estimate } = useAgentEstimates();
+  const { data: estimates } = useAgentEstimates();
   const start = useStartMultiRun();
 
   const all = agents ?? [];
   const estimateByAgent = React.useMemo(
-    () => new Map((estimate?.agents ?? []).map((e) => [e.agent_id, e])),
-    [estimate],
+    () => new Map((estimates ?? []).map((e) => [e.agent_id, e])),
+    [estimates],
   );
 
   React.useEffect(() => {

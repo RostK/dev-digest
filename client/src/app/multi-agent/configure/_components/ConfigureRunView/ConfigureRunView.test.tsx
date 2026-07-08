@@ -59,15 +59,15 @@ vi.mock("@/lib/hooks/reviews", () => ({
 }));
 
 const mutateAsync = vi.fn().mockResolvedValue({ id: "run-1" });
+// The wire shape (and hence the hook's `data`) is a BARE AgentEstimate[] —
+// GET /multi-agent/estimates never wraps it in {agents, summary}; the client
+// aggregates the selected subset itself (Q2).
 vi.mock("@/lib/hooks/multiAgent", () => ({
   useAgentEstimates: () => ({
-    data: {
-      agents: [
-        { agent_id: "a1", duration_ms: 4000, cost_usd: 0.05, has_history: true },
-        { agent_id: "a2", duration_ms: null, cost_usd: null, has_history: false },
-      ],
-      summary: { duration_ms: 4000, cost_usd: 0.05, partial: true },
-    },
+    data: [
+      { agent_id: "a1", duration_ms: 4000, cost_usd: 0.05, has_history: true },
+      { agent_id: "a2", duration_ms: null, cost_usd: null, has_history: false },
+    ],
   }),
   useStartMultiRun: () => ({ mutateAsync, isPending: false }),
 }));
