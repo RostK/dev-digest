@@ -5,22 +5,33 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import { api } from "../api";
-import type {
-  MultiAgentEstimate,
-  MultiAgentRun,
-  MultiAgentRunListItem,
-  MultiAgentRunRequest,
+import {
+  AgentEstimate,
+  type MultiAgentRun,
+  type MultiAgentRunListItem,
+  type MultiAgentRunRequest,
 } from "@devdigest/shared";
 
+const AgentEstimateList = z.array(AgentEstimate);
+
 /** Per-agent pre-run time·cost estimate (derived from each agent's OWN past
-   agent_runs), workspace-scoped (AC-5/AC-6). No usable history → `has_history:
-   false`; callers aggregate the SELECTED subset themselves (never trust a
-   fabricated number for an agent with no history). */
+   agent_runs), workspace-scoped (AC-5/AC-6). The wire response is a BARE
+   `AgentEstimate[]` (the server aggregates nothing — Q2: aggregation into a
+   selection's summary happens client-side), so it's validated here against
+   the shared Zod contract rather than trusted via an `as`-cast. A malformed
+   payload degrades to `[]` (never a fabricated per-agent number) so callers'
+   `has_history` lookups just miss and render the safe no-history placeholder.
+   Callers aggregate the SELECTED subset themselves. */
 export function useAgentEstimates() {
   return useQuery({
     queryKey: ["multi-agent-estimates"],
-    queryFn: () => api.get<MultiAgentEstimate>("/multi-agent/estimates"),
+    queryFn: async () => {
+      const raw = await api.get<unknown>("/multi-agent/estimates");
+      const parsed = AgentEstimateList.safeParse(raw);
+      return parsed.success ? parsed.data : [];
+    },
   });
 }
 

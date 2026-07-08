@@ -30,7 +30,7 @@ export function ConfigureRunView() {
 
   const { data: pulls, isLoading: pullsLoading } = usePulls(repoId);
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: estimate } = useAgentEstimates();
+  const { data: estimates } = useAgentEstimates();
 
   const [prId, setPrId] = React.useState("");
   const { data: reviews } = usePrReviews(prId || null);
@@ -42,8 +42,8 @@ export function ConfigureRunView() {
   const prOptions = (pulls ?? []).filter((p): p is typeof p & { id: string } => !!p.id);
   const summaryByAgent = React.useMemo(() => lastRunSummaryByAgent(reviews ?? []), [reviews]);
   const estimateByAgent = React.useMemo(
-    () => new Map((estimate?.agents ?? []).map((e) => [e.agent_id, e])),
-    [estimate],
+    () => new Map((estimates ?? []).map((e) => [e.agent_id, e])),
+    [estimates],
   );
 
   const toggle = (agentId: string) => {
