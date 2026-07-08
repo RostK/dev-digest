@@ -1,0 +1,153 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for MultiAgentResultsView (mirrors ConfigureRunView). */
+export const s = {
+  page: { padding: "24px 32px 48px", maxWidth: 1180, margin: "0 auto" } satisfies CSSProperties,
+  header: {
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 16,
+    marginBottom: 18,
+    flexWrap: "wrap",
+  } satisfies CSSProperties,
+  prLine: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    letterSpacing: "0.02em",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+    marginBottom: 4,
+  } satisfies CSSProperties,
+  title: { fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" } satisfies CSSProperties,
+  headerRight: { display: "flex", alignItems: "center", gap: 14, flexShrink: 0 } satisfies CSSProperties,
+  totals: { fontSize: 13, color: "var(--text-secondary)" } satisfies CSSProperties,
+
+  switcher: { display: "flex", gap: 6, marginBottom: 18 } satisfies CSSProperties,
+
+  columnsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+    gap: 14,
+    marginBottom: 28,
+  } satisfies CSSProperties,
+  column: {
+    display: "flex",
+    flexDirection: "column",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    background: "var(--bg-elevated)",
+    overflow: "hidden",
+  } satisfies CSSProperties,
+  columnHeader: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    padding: "12px 14px",
+    borderBottom: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  columnHeaderTop: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  } satisfies CSSProperties,
+  agentName: { fontSize: 14, fontWeight: 700, color: "var(--text-primary)" } satisfies CSSProperties,
+  metaLine: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+
+  findingsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    padding: "10px 14px",
+    flex: 1,
+    minHeight: 60,
+  } satisfies CSSProperties,
+  findingRow: { display: "flex", flexDirection: "column", gap: 2 } satisfies CSSProperties,
+  findingTitle: {
+    fontSize: 13,
+    color: "var(--text-primary)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  } satisfies CSSProperties,
+  findingLoc: { fontSize: 11.5, color: "var(--text-muted)" } satisfies CSSProperties,
+  emptyFindings: { fontSize: 12.5, color: "var(--text-muted)", padding: "6px 0" } satisfies CSSProperties,
+
+  columnFooter: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "8px 14px",
+    borderTop: "1px solid var(--border)",
+  } satisfies CSSProperties,
+  findingsCount: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+
+  tabsWrap: { marginBottom: 28 } satisfies CSSProperties,
+  tabStrip: {
+    display: "flex",
+    gap: 2,
+    borderBottom: "1px solid var(--border)",
+    marginBottom: 14,
+    flexWrap: "wrap",
+  } satisfies CSSProperties,
+  tabButton: (active: boolean): CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "10px 14px",
+    border: "none",
+    background: "transparent",
+    borderBottom: "2px solid " + (active ? "var(--accent)" : "transparent"),
+    marginBottom: -1,
+    cursor: "pointer",
+    fontSize: 13.5,
+    fontWeight: active ? 600 : 500,
+    color: active ? "var(--text-primary)" : "var(--text-secondary)",
+  }),
+
+  summaryCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    padding: "14px 16px",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    background: "var(--bg-elevated)",
+    marginBottom: 16,
+  } satisfies CSSProperties,
+  summaryTop: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  summaryText: { fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.5, margin: 0 } satisfies CSSProperties,
+  summaryMeta: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    fontSize: 12.5,
+    color: "var(--text-muted)",
+  } satisfies CSSProperties,
+
+  cardsList: { display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
+
+  statusBadge: (status: "running" | "done" | "failed"): CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    width: "fit-content",
+    fontSize: 11.5,
+    fontWeight: 600,
+    textTransform: "uppercase",
+    letterSpacing: "0.03em",
+    color:
+      status === "failed" ? "var(--crit)" : status === "done" ? "var(--ok)" : "var(--text-muted)",
+  }),
+  scoreBadge: (tier: "ok" | "warn" | "crit", compact?: boolean): CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    padding: compact ? "1px 6px" : "2px 9px",
+    borderRadius: 5,
+    fontSize: compact ? 11 : 12,
+    fontWeight: 700,
+    color: `var(--${tier})`,
+    background: `var(--${tier}-bg)`,
+  }),
+} as const;
