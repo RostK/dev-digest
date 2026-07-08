@@ -11,3 +11,4 @@ The `spec-author` agent appends a row here for every new spec and updates Status
 | SPEC-03 | 2026-07-02 | Onboarding Generator | cross | approved | none | [cross/SPEC-03-2026-07-02-onboarding-generator.md](cross/SPEC-03-2026-07-02-onboarding-generator.md) |
 | SPEC-04 | 2026-07-02 | Why+Risk Brief (PR Brief) | cross | approved | none | [cross/SPEC-04-2026-07-02-pr-why-risk-brief.md](cross/SPEC-04-2026-07-02-pr-why-risk-brief.md) |
 | SPEC-05 | 2026-07-06 | Eval Pipeline (agent regression harness) | cross | approved | none | [cross/SPEC-05-2026-07-06-eval-pipeline.md](cross/SPEC-05-2026-07-06-eval-pipeline.md) |
+| SPEC-06 | 2026-07-08 | Multi-Agent Review | cross | approved | none | [cross/SPEC-06-2026-07-08-multi-agent-review.md](cross/SPEC-06-2026-07-08-multi-agent-review.md) |
