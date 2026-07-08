@@ -26,6 +26,7 @@ import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { SkillsRepository } from '../modules/skills/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
+import { ReviewService } from '../modules/reviews/service.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { BlastService } from '../modules/blast/service.js';
@@ -55,6 +56,9 @@ export interface ContainerOverrides {
   tokenizer?: Tokenizer;
   /** blast facade — tests inject a mock BlastService (e.g. for the PR Brief). */
   blast?: BlastService;
+  /** review facade — tests inject a mock ReviewService (e.g. multi-agent-review's
+   *  concurrent per-agent fan-out, SPEC-06 T2). */
+  reviewService?: ReviewService;
 }
 
 export class Container {
@@ -77,6 +81,7 @@ export class Container {
   private _agentsRepo?: AgentsRepository;
   private _skillsRepo?: SkillsRepository;
   private _reviewRepo?: ReviewRepository;
+  private _reviewService?: ReviewService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -108,6 +113,19 @@ export class Container {
 
   get reviewRepo(): ReviewRepository {
     return (this._reviewRepo ??= new ReviewRepository(this.db));
+  }
+
+  /**
+   * The single-agent review facade (`runReview` + reads). Lets a SIBLING module
+   * (multi-agent-review, SPEC-06 T2) fan out N concurrent single-agent
+   * executions — one `runReview` call per agent — without importing the
+   * reviews module's internals (run-executor stays untouched/unseen). Mirrors
+   * `get blast()`. Tests inject a mock via `ContainerOverrides.reviewService`.
+   */
+  get reviewService(): ReviewService {
+    if (this.overrides.reviewService) return this.overrides.reviewService;
+    this._reviewService ??= new ReviewService(this);
+    return this._reviewService;
   }
 
   get codeIndex(): CodeIndex {
