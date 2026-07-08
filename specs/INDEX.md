@@ -12,3 +12,4 @@ The `spec-author` agent appends a row here for every new spec and updates Status
 | SPEC-04 | 2026-07-02 | Why+Risk Brief (PR Brief) | cross | approved | none | [cross/SPEC-04-2026-07-02-pr-why-risk-brief.md](cross/SPEC-04-2026-07-02-pr-why-risk-brief.md) |
 | SPEC-05 | 2026-07-06 | Eval Pipeline (agent regression harness) | cross | approved | none | [cross/SPEC-05-2026-07-06-eval-pipeline.md](cross/SPEC-05-2026-07-06-eval-pipeline.md) |
 | SPEC-06 | 2026-07-08 | Multi-Agent Review | cross | approved | none | [cross/SPEC-06-2026-07-08-multi-agent-review.md](cross/SPEC-06-2026-07-08-multi-agent-review.md) |
+| SPEC-07 | 2026-07-08 | Export to CI | cross | approved | none | [cross/SPEC-07-2026-07-08-export-to-ci.md](cross/SPEC-07-2026-07-08-export-to-ci.md) |
