@@ -5,33 +5,41 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { z } from "zod";
 import { api } from "../api";
-import {
+import type {
   AgentEstimate,
-  type MultiAgentRun,
-  type MultiAgentRunListItem,
-  type MultiAgentRunRequest,
+  MultiAgentRun,
+  MultiAgentRunListItem,
+  MultiAgentRunRequest,
 } from "@devdigest/shared";
 
-const AgentEstimateList = z.array(AgentEstimate);
+/** Wire guard for a bare `AgentEstimate[]` — a structural check kept type-only
+   (no runtime Zod schema pulled from the `@devdigest/shared` barrel, which the
+   client bundles as types only). Validates the two fields callers depend on
+   (`agent_id`, `has_history`); a malformed payload degrades to `[]`. */
+function toAgentEstimates(raw: unknown): AgentEstimate[] {
+  if (!Array.isArray(raw)) return [];
+  const ok = raw.every(
+    (e): e is AgentEstimate =>
+      !!e &&
+      typeof (e as AgentEstimate).agent_id === "string" &&
+      typeof (e as AgentEstimate).has_history === "boolean",
+  );
+  return ok ? (raw as AgentEstimate[]) : [];
+}
 
 /** Per-agent pre-run time·cost estimate (derived from each agent's OWN past
    agent_runs), workspace-scoped (AC-5/AC-6). The wire response is a BARE
    `AgentEstimate[]` (the server aggregates nothing — Q2: aggregation into a
-   selection's summary happens client-side), so it's validated here against
-   the shared Zod contract rather than trusted via an `as`-cast. A malformed
-   payload degrades to `[]` (never a fabricated per-agent number) so callers'
-   `has_history` lookups just miss and render the safe no-history placeholder.
-   Callers aggregate the SELECTED subset themselves. */
+   selection's summary happens client-side), so it's validated structurally
+   here rather than trusted via an `as`-cast. A malformed payload degrades to
+   `[]` (never a fabricated per-agent number) so callers' `has_history` lookups
+   just miss and render the safe no-history placeholder. Callers aggregate the
+   SELECTED subset themselves. */
 export function useAgentEstimates() {
   return useQuery({
     queryKey: ["multi-agent-estimates"],
-    queryFn: async () => {
-      const raw = await api.get<unknown>("/multi-agent/estimates");
-      const parsed = AgentEstimateList.safeParse(raw);
-      return parsed.success ? parsed.data : [];
-    },
+    queryFn: async () => toAgentEstimates(await api.get<unknown>("/multi-agent/estimates")),
   });
 }
 
