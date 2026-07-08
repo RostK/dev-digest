@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useCallback } from "react";
+import React from "react";
 import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
-import { RunReviewDropdown } from "../RunReviewDropdown";
+import { MultiAgentPicker } from "../MultiAgentPicker";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
 
@@ -14,8 +14,6 @@ interface PrDetailHeaderProps {
   /** github.com PR URL; null when the repo's full_name isn't known yet. */
   githubUrl?: string | null;
   onSetTab: (tab: string) => void;
-  onRunStart: () => void;
-  onRunsStarted: () => void;
 }
 
 export function PrDetailHeader({
@@ -25,8 +23,6 @@ export function PrDetailHeader({
   findingsCount,
   githubUrl,
   onSetTab,
-  onRunStart,
-  onRunsStarted,
 }: PrDetailHeaderProps) {
   // Publish the sticky header's live height as a CSS var so scroll-to-file /
   // scroll-to-line targets in the diff can offset by it (otherwise scrollIntoView
@@ -46,14 +42,6 @@ export function PrDetailHeader({
       document.documentElement.style.removeProperty("--pr-detail-header-h");
     };
   }, []);
-
-  const handleRunStart = useCallback(() => {
-    onRunStart();
-  }, [onRunStart]);
-
-  const handleRunsStarted = useCallback(() => {
-    onRunsStarted();
-  }, [onRunsStarted]);
 
   const statusColor =
     pr.status === "merged"
@@ -109,11 +97,9 @@ export function PrDetailHeader({
             View on GitHub
           </Button>
           {prId && (
-            <RunReviewDropdown
+            <MultiAgentPicker
               prId={prId}
               warnMerged={pr.status === "merged" || pr.status === "closed"}
-              onRunStart={handleRunStart}
-              onRunsStarted={handleRunsStarted}
             />
           )}
         </div>
