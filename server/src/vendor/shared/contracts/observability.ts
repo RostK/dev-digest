@@ -6,9 +6,16 @@ import { Severity } from './findings.js';
  *
  * These are NEW contracts (A5 owns this file; the barrel re-exports it). They
  * sit alongside A2's `review-api.ts`:
- *   - MultiAgentRun        the response of POST /pulls/:id/multi-agent-run
+ *   - MultiAgentRunRequest the body of POST /pulls/:id/multi-agent-run
+ *   - MultiAgentRun        the response of POST /pulls/:id/multi-agent-run and
+ *                          GET /multi-agent-runs/:id
  *   - AgentColumn          one agent's column in the multi-agent view
  *   - Conflict / ConflictTake  where agents disagree on the same file:line
+ *   - AgentEstimate / MultiAgentEstimate  the pre-run time·cost estimate
+ *                          (GET /multi-agent/estimates), derived from each
+ *                          agent's own past agent_runs — no model call
+ *   - MultiAgentRunListItem  one row of a PR's multi-run history
+ *                          (GET /pulls/:id/multi-agent-runs)
  *   - AgentStats           per-agent quality aggregates (GET /agents/:id/stats)
  *   - CuratorResult        the cross-session memory curator outcome
  *
@@ -71,7 +78,39 @@ export const Conflict = z.object({
 });
 export type Conflict = z.infer<typeof Conflict>;
 
-/** Response of POST /pulls/:id/multi-agent-run and GET /pulls/:id/multi-agent. */
+/** Body of POST /pulls/:id/multi-agent-run — the selected agents to fan out. */
+export const MultiAgentRunRequest = z.object({
+  agent_ids: z.array(z.string()).min(1),
+});
+export type MultiAgentRunRequest = z.infer<typeof MultiAgentRunRequest>;
+
+/** One agent's pre-run time·cost estimate, derived from ITS OWN past agent_runs. */
+export const AgentEstimate = z.object({
+  agent_id: z.string(),
+  /** null when the agent has no usable history (never run, or only failed runs). */
+  duration_ms: z.number().int().nullable(),
+  cost_usd: z.number().nullable(),
+  /** false → render `— · no history` and exclude from the summary aggregate. */
+  has_history: z.boolean(),
+});
+export type AgentEstimate = z.infer<typeof AgentEstimate>;
+
+/**
+ * Response of GET /multi-agent/estimates: one AgentEstimate per selectable
+ * agent plus a summary aggregated over the agents that HAVE history. `partial`
+ * is true when at least one agent was excluded for lacking history (AC-6).
+ */
+export const MultiAgentEstimate = z.object({
+  agents: z.array(AgentEstimate),
+  summary: z.object({
+    duration_ms: z.number().int().nullable(),
+    cost_usd: z.number().nullable(),
+    partial: z.boolean(),
+  }),
+});
+export type MultiAgentEstimate = z.infer<typeof MultiAgentEstimate>;
+
+/** Response of POST /pulls/:id/multi-agent-run and GET /multi-agent-runs/:id. */
 export const MultiAgentRun = z.object({
   id: z.string(),
   pr_id: z.string(),
@@ -82,8 +121,21 @@ export const MultiAgentRun = z.object({
   total_cost_usd: z.number().nullable(),
   columns: z.array(AgentColumn),
   conflicts: z.array(Conflict),
+  /** The pre-run estimate captured at launch (calibration data, AC-22). Absent
+   *  on rows created before this field existed — nullish keeps old rows valid. */
+  estimate: MultiAgentEstimate.nullish(),
 });
 export type MultiAgentRun = z.infer<typeof MultiAgentRun>;
+
+/** One row of a PR's multi-run history (GET /pulls/:id/multi-agent-runs). */
+export const MultiAgentRunListItem = z.object({
+  id: z.string(),
+  ran_at: z.string(),
+  agent_count: z.number().int(),
+  total_duration_ms: z.number().int().nullable(),
+  total_cost_usd: z.number().nullable(),
+});
+export type MultiAgentRunListItem = z.infer<typeof MultiAgentRunListItem>;
 
 // ---------------------------------------------------------------------------
 // Per-agent Stats (GET /agents/:id/stats)
