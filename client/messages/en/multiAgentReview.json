@@ -1,0 +1,45 @@
+{
+  "crumb": {
+    "lab": "Multi-Agent Review",
+    "title": "Results"
+  },
+  "header": {
+    "title": "Multi-agent review",
+    "prReference": "PR #{number}",
+    "noPr": "Multi-agent review",
+    "totals": "{agents} agents · {duration} total · {cost}",
+    "configureRun": "Configure run"
+  },
+  "switcher": {
+    "label": "Layout",
+    "columns": "Columns",
+    "tabs": "Tabs"
+  },
+  "column": {
+    "metaLine": "{duration} · {cost}",
+    "noFindings": "No findings",
+    "viewTrace": "View trace",
+    "findingsCount": "{count} findings",
+    "score": "{score}/100"
+  },
+  "status": {
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed"
+  },
+  "tabs": {
+    "label": "Agents",
+    "noSummary": "No summary yet"
+  },
+  "error": {
+    "title": "Couldn't load this multi-agent review"
+  },
+  "history": {
+    "title": "Past runs",
+    "rerun": "Re-run",
+    "starting": "Starting…",
+    "emptyTitle": "No past runs",
+    "emptyBody": "This PR has no other multi-agent review runs yet.",
+    "rowMeta": "{agents} agents · {duration} · {cost}"
+  }
+}
