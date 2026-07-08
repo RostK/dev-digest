@@ -27,6 +27,8 @@ by that run's retro (older runs predate cache-hit / tool-call tracking — fille
 | 2026-07-06 | write-spec (SPEC-05 eval-pipeline) | 5 / 0 | 358,898 | ? | 186 | n/a | 1.43× | first zero-waste, fully-measured run (no nesting → firm total); rework = `verify:l06` clarification reversal caught at spec + edited in-thread | [↗](RETRO-2026-07-06-write-spec-spec05.md) |
 | 2026-07-06 | plan-implementation (SPEC-05) | 1 / 0 | 146,191 | ? | 33 | n/a | 1.0 | context pack held planner cost flat (146k vs SPEC-02's 148k) despite a bigger feature; 2 decisions no-reversal; pack's `rangeIntersects` reuse claim was inaccurate (private) → became decision R1 | [↗](RETRO-2026-07-06-plan-spec05.md) |
 | 2026-07-09 | verify + pr-self-review gate (SPEC-06) | 3 / 0 | 384,501 | ? | 113 | 0 | 1.37× | first verify/gate-only run; AC-7 runtime bug slipped plan-verifier + all static gates (only the DB-backed it.test caught it); feature source re-read ~2× across the 3 agents (5th shared-pack confirmation) | [↗](RETRO-2026-07-09-verify-pr-gate.md) |
+| 2026-07-08 | write-spec (SPEC-07 Export to CI) | 1 / 2 | 123,824 | ? | 23 | 0 | 1.0 | 2 rejected pre-exec launches (global spec-ID + simplicity elicited after launch); in-agent rich→simple rewrite; 0 NCs returned | [↗](RETRO-2026-07-08-write-spec.md) |
+| 2026-07-08 | plan-implementation (SPEC-07 Export to CI) | 1 / 0 | 151,325 | ? | 30 | n/a | 1.0 | first zero-waste plan phase: pre-grounded launch prompt + markers-not-AskUserQuestion protocol; 3 open Qs + mode + approval gated in ONE 4-question round; 0 planner re-invocations (answers folded in main thread) | [↗](RETRO-2026-07-08-plan-spec07.md) |
 
 ## Reading the trend so far
 - **Token spend is climbing with fan-out width**: 148k (1 agent) → ~721k (7) → 2.54M (22). The jump to
