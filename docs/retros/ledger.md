@@ -24,6 +24,8 @@ by that run's retro (older runs predate cache-hit / tool-call tracking — fille
 | 2026-07-02 | write-spec + plan (SPEC-04) | 3 / 2 | ~610,555 | ? | ? | n/a | — | ~31% of known tokens wasted (killed planner + duplicate resume) | [↗](RETRO-2026-07-02-plan-spec04.md) |
 | 2026-07-03 | implement (SPEC-04 Brief) | 22 / 0 | 2,540,688 | ? | 857 | 1 | — | 5-finder /code-review fan-out was the top token amplifier; 2 post-verify feature iterations later reverted | [↗](RETRO-2026-07-03-implement-spec04.md) |
 | 2026-07-04 | ad-hoc (brief fixes — Explore fan-out) | 0 / 3 | unknown | ? | ? | n/a | — | 3 Explore agents launched async then lost to a plan-mode transition (0-byte journals); all exploration redone in main thread | [↗](RETRO-2026-07-04-brief-fixes.md) |
+| 2026-07-08 | write-spec (SPEC-07 Export to CI) | 1 / 2 | 123,824 | ? | 23 | 0 | 1.0 | 2 rejected pre-exec launches (global spec-ID + simplicity elicited after launch); in-agent rich→simple rewrite; 0 NCs returned | [↗](RETRO-2026-07-08-write-spec.md) |
+| 2026-07-08 | plan-implementation (SPEC-07 Export to CI) | 1 / 0 | 151,325 | ? | 30 | n/a | 1.0 | first zero-waste plan phase: pre-grounded launch prompt + markers-not-AskUserQuestion protocol; 3 open Qs + mode + approval gated in ONE 4-question round; 0 planner re-invocations (answers folded in main thread) | [↗](RETRO-2026-07-08-plan-spec07.md) |
 
 ## Reading the trend so far
 - **Token spend is climbing with fan-out width**: 148k (1 agent) → ~721k (7) → 2.54M (22). The jump to
