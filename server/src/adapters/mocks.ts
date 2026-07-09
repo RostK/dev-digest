@@ -17,6 +17,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRunMeta,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -236,6 +237,18 @@ export class MockGitHubClient implements GitHubClient {
 
   async currentLogin(): Promise<string> {
     return this.opts.login ?? 'mock-user';
+  }
+
+  async listWorkflowRuns(_repo: RepoRef, _workflowFile: string): Promise<WorkflowRunMeta[]> {
+    return [];
+  }
+
+  async downloadRunArtifact(
+    _repo: RepoRef,
+    _runId: number,
+    _artifactName: string,
+  ): Promise<Uint8Array | null> {
+    return null;
   }
 }
 

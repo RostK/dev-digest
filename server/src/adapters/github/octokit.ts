@@ -11,6 +11,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRunMeta,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
@@ -368,5 +369,63 @@ export class OctokitGitHubClient implements GitHubClient {
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
+  }
+
+  async listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRunMeta[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRuns({
+            owner: repo.owner,
+            repo: repo.name,
+            workflow_id: workflowFile,
+            per_page: 50,
+          });
+          return res.data.workflow_runs.map((run) => ({
+            id: run.id,
+            html_url: run.html_url,
+            // GitHub only populates `pull_requests` for same-repo (non-fork) PRs.
+            pr_number: run.pull_requests?.[0]?.number ?? null,
+            created_at: run.created_at,
+            conclusion: run.conclusion,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async downloadRunArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<Uint8Array | null> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const artifacts = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+            owner: repo.owner,
+            repo: repo.name,
+            run_id: runId,
+            per_page: 100,
+          });
+          const artifact = artifacts.data.artifacts.find((a) => a.name === artifactName);
+          if (!artifact) return null;
+          try {
+            const download = await this.octokit.rest.actions.downloadArtifact({
+              owner: repo.owner,
+              repo: repo.name,
+              artifact_id: artifact.id,
+              archive_format: 'zip',
+            });
+            return new Uint8Array(download.data as ArrayBuffer);
+          } catch {
+            // Artifact expired/not found between list and download — treat as absent.
+            return null;
+          }
+        })(),
+        TIMEOUT,
+      ),
+    );
   }
 }
