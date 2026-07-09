@@ -140,6 +140,15 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/** Minimal metadata for one Actions run of a given workflow file (used by Sync). */
+export interface WorkflowRunMeta {
+  id: number;
+  html_url: string;
+  pr_number: number | null;
+  created_at: string;
+  conclusion: string | null;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -164,6 +173,14 @@ export interface GitHubClient {
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /** List runs of a single workflow file (e.g. "devdigest.yml") for Sync. */
+  listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRunMeta[]>;
+  /**
+   * Download a named artifact from a workflow run as raw bytes (zip). Returns
+   * `null` when the run has no artifact with that name (e.g. not found or
+   * expired) rather than throwing.
+   */
+  downloadRunArtifact(repo: RepoRef, runId: number, artifactName: string): Promise<Uint8Array | null>;
 }
 
 // ---------- Git (simple-git, heavy) ----------
