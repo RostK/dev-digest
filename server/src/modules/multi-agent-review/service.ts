@@ -55,6 +55,20 @@ export class MultiAgentReviewService {
     const estimate = await this.estimateForAgents(workspaceId, agentIds);
     const multiRun = await this.repo.createMultiRun(workspaceId, prId, estimate);
 
+    // Warm the PR's intent ONCE before fanning out. Each fanned-out review runs
+    // its OWN `executeRuns`, which calls `ensureIntent`; on a COLD cache all N
+    // miss simultaneously and each recomputes the intent (there is no
+    // single-flight dedup), and those competing cold computes serialize the
+    // whole fan-out — the agents' review calls then fire seconds apart instead
+    // of overlapping, defeating the concurrency AC-7 promises. Computing it here
+    // first means every fanned-out run hits the cache (`getIntent`) and the
+    // reviews genuinely run in parallel (`total_duration_ms` = max, not sum).
+    // Fail-soft: intent is best-effort and must never block a multi-run (mirrors
+    // `ensureIntent`'s own catch).
+    if (!(await this.container.reviewService.getIntent(workspaceId, prId))) {
+      await this.container.reviewService.recomputeIntent(workspaceId, prId).catch(() => undefined);
+    }
+
     // One INDEPENDENT single-agent runReview call per agent — see the trap
     // documented above. Promise.all here waits only for the N calls to return
     // their runId (near-instant); the reviews themselves keep executing in
