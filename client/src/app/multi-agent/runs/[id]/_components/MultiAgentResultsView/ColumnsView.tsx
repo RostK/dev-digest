@@ -1,7 +1,10 @@
 /* ColumnsView — one column per agent (AC-12): header (name, score badge,
    live status, duration·cost), light finding rows (title + file:line), and a
    footer `View trace` + "N findings". Purely presentational — the parent
-   overlays live status onto `columns` before it reaches here. */
+   overlays live status onto `columns` before it reaches here. Each finding row
+   is a click-through: it hands the parent the (runId, findingId) so the results
+   view jumps to that agent's Tabs detail with the finding expanded (keeps the
+   compact side-by-side layout while making findings reachable). */
 "use client";
 
 import { useTranslations } from "next-intl";
@@ -15,9 +18,11 @@ import { s } from "./styles";
 export interface ColumnsViewProps {
   columns: AgentColumn[];
   onOpenTrace: (runId: string) => void;
+  /** Open a finding's full detail (jumps to that agent's Tabs view, expanded). */
+  onOpenFinding: (runId: string, findingId: string) => void;
 }
 
-export function ColumnsView({ columns, onOpenTrace }: ColumnsViewProps) {
+export function ColumnsView({ columns, onOpenTrace, onOpenFinding }: ColumnsViewProps) {
   const t = useTranslations("multiAgentReview");
   return (
     <div style={s.columnsGrid}>
@@ -42,12 +47,18 @@ export function ColumnsView({ columns, onOpenTrace }: ColumnsViewProps) {
               <div style={s.emptyFindings}>{t("column.noFindings")}</div>
             ) : (
               col.findings.map((f) => (
-                <div key={f.id} style={s.findingRow}>
+                <button
+                  key={f.id}
+                  type="button"
+                  style={s.findingRow}
+                  title={t("column.openFinding")}
+                  onClick={() => onOpenFinding(col.run_id, f.id)}
+                >
                   <span style={s.findingTitle}>{f.title}</span>
                   <span className="mono" style={s.findingLoc}>
                     {f.file}:{f.start_line}
                   </span>
-                </div>
+                </button>
               ))
             )}
           </div>

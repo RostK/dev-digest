@@ -19,12 +19,33 @@ export interface TabsViewProps {
   prId: string;
   findingMap: Map<string, FindingRecord>;
   onOpenTrace: (runId: string) => void;
+  /** When arriving from a Columns finding click: the agent tab to open and the
+   *  finding to expand + scroll to. TabsView remounts on the Columns→Tabs
+   *  switch, so these are honored via initial state + a mount effect. */
+  focusRunId?: string;
+  focusFindingId?: string;
 }
 
-export function TabsView({ columns, prId, findingMap, onOpenTrace }: TabsViewProps) {
+export function TabsView({
+  columns,
+  prId,
+  findingMap,
+  onOpenTrace,
+  focusRunId,
+  focusFindingId,
+}: TabsViewProps) {
   const t = useTranslations("multiAgentReview");
-  const [activeId, setActiveId] = React.useState<string | undefined>(columns[0]?.run_id);
+  const [activeId, setActiveId] = React.useState<string | undefined>(
+    focusRunId ?? columns[0]?.run_id,
+  );
   const active = columns.find((c) => c.run_id === activeId) ?? columns[0];
+
+  // Scroll the focused finding into view once its expanded card has mounted.
+  React.useEffect(() => {
+    if (!focusFindingId) return;
+    const el = document.querySelector(`[data-finding-id="${focusFindingId}"]`);
+    el?.scrollIntoView({ block: "center" });
+  }, [focusFindingId]);
 
   if (!active) return null;
 
@@ -78,6 +99,7 @@ export function TabsView({ columns, prId, findingMap, onOpenTrace }: TabsViewPro
                 finding={enriched}
                 agentName={active.agent_name}
                 prId={prId}
+                defaultExpanded={f.id === focusFindingId}
               />
             );
           })

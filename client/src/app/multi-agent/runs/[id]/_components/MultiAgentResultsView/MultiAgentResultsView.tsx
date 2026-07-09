@@ -45,6 +45,15 @@ export function MultiAgentResultsView({ runId }: MultiAgentResultsViewProps) {
 
   const [mode, setMode] = React.useState<Mode>("columns");
   const [traceRunId, setTraceRunId] = React.useState<string | null>(null);
+  // Set when a Columns finding row is clicked: jump to that agent's Tabs detail
+  // with the finding expanded (AC-13 reachability without leaving the results
+  // page). Cleared when the user manually re-selects the Tabs layout.
+  const [focus, setFocus] = React.useState<{ runId: string; findingId: string } | null>(null);
+
+  const openFinding = React.useCallback((runId: string, findingId: string) => {
+    setFocus({ runId, findingId });
+    setMode("tabs");
+  }, []);
 
   // Only subscribe while at least one column is still running — a completed
   // multi-run renders from persisted data with no live stream.
@@ -133,16 +142,26 @@ export function MultiAgentResultsView({ runId }: MultiAgentResultsViewProps) {
             kind={mode === "tabs" ? "primary" : "secondary"}
             size="sm"
             aria-pressed={mode === "tabs"}
-            onClick={() => setMode("tabs")}
+            onClick={() => {
+              setFocus(null);
+              setMode("tabs");
+            }}
           >
             {t("switcher.tabs")}
           </Button>
         </div>
 
         {mode === "columns" ? (
-          <ColumnsView columns={columns} onOpenTrace={setTraceRunId} />
+          <ColumnsView columns={columns} onOpenTrace={setTraceRunId} onOpenFinding={openFinding} />
         ) : (
-          <TabsView columns={columns} prId={run.pr_id} findingMap={findingMap} onOpenTrace={setTraceRunId} />
+          <TabsView
+            columns={columns}
+            prId={run.pr_id}
+            findingMap={findingMap}
+            onOpenTrace={setTraceRunId}
+            focusRunId={focus?.runId}
+            focusFindingId={focus?.findingId}
+          />
         )}
 
         <ConflictsBlock conflicts={run.conflicts} />
