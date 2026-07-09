@@ -83,6 +83,9 @@ vi.mock("@/lib/hooks/reviews", () => ({
 
 import { MultiAgentResultsView } from "./MultiAgentResultsView";
 
+// jsdom doesn't implement scrollIntoView; the focus-scroll effect calls it.
+Element.prototype.scrollIntoView = vi.fn();
+
 afterEach(() => {
   cleanup();
   mockUseMultiRun.mockReset();
@@ -236,6 +239,19 @@ describe("MultiAgentResultsView", () => {
     fireEvent.click(screen.getByRole("tab", { name: /Performance/i }));
     fireEvent.click(screen.getByRole("button", { name: "View trace" }));
     expect(screen.getByTestId("trace-drawer")).toHaveAttribute("data-run-id", "r2");
+  });
+
+  it("AC-13: clicking a Columns finding jumps to that agent's Tabs detail with the finding expanded", () => {
+    mockRun(RUN_SETTLED);
+    renderWithIntl(<MultiAgentResultsView runId="run-1" />);
+
+    // Columns view (default): the Performance column's finding row is a button.
+    fireEvent.click(screen.getByRole("button", { name: /N\+1 query/i }));
+
+    // Now in Tabs, the Performance tab is active and the finding is expanded
+    // (its rationale — only rendered in the expanded card body — is visible).
+    expect(screen.getByRole("tab", { name: /Performance/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("This loop issues one query per row.")).toBeInTheDocument();
   });
 
   it("AC-15 (smoke): renders the 'Where agents disagree' conflicts block", () => {

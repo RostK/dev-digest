@@ -20,7 +20,8 @@
     "noFindings": "No findings",
     "viewTrace": "View trace",
     "findingsCount": "{count} findings",
-    "score": "{score}/100"
+    "score": "{score}/100",
+    "openFinding": "Open finding detail"
   },
   "status": {
     "running": "Running",
