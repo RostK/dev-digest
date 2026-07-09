@@ -78,21 +78,29 @@ export class CiService {
     // action === 'open_pr' (AC-13).
     const gh = await this.container.github();
     const repo = parseRepo(input.repo);
-    await gh.commitFiles(repo, {
-      branch: CI_BRANCH,
-      base: input.base,
-      message: 'chore(ci): update DevDigest CI configuration',
-      files: files.map((f) => ({ path: f.path, contents: f.contents })),
-    });
-    const existingPr = await gh.findOpenPr(repo, CI_BRANCH);
-    const pr =
-      existingPr ??
-      (await gh.openPullRequest(repo, {
-        title: 'Add DevDigest CI review',
-        head: CI_BRANCH,
+    let pr: { url: string };
+    try {
+      await gh.commitFiles(repo, {
+        branch: CI_BRANCH,
         base: input.base,
-        body: 'Automated PR from DevDigest to install/update the CI review workflow. Review every file before merging — see `.github/workflows/devdigest-review.yml`.',
-      }));
+        message: 'chore(ci): update DevDigest CI configuration',
+        files: files.map((f) => ({ path: f.path, contents: f.contents })),
+      });
+      const existingPr = await gh.findOpenPr(repo, CI_BRANCH);
+      pr =
+        existingPr ??
+        (await gh.openPullRequest(repo, {
+          title: 'Add DevDigest CI review',
+          head: CI_BRANCH,
+          base: input.base,
+          body: 'Automated PR from DevDigest to install/update the CI review workflow. Review every file before merging — see `.github/workflows/devdigest-review.yml`.',
+        }));
+    } catch (err) {
+      // Surface a token-permission failure as an actionable 422 rather than a
+      // generic 500: "Open a PR" commits the bundle (create-tree/commit/ref),
+      // which needs Contents:write — a read-only token 403s here.
+      throw this.asGitHubWriteError(err, input.repo, input.base);
+    }
 
     const installationRow = await this.repo.upsertInstallation(
       workspaceId,
@@ -107,6 +115,30 @@ export class CiService {
       files,
       pr_url: pr.url,
     };
+  }
+
+  /**
+   * Map a GitHub write failure from the `open_pr` path to an actionable error:
+   * a read-only token 403s on create-tree/commit; a missing repo/base 404s.
+   * Anything else is rethrown unchanged.
+   */
+  private asGitHubWriteError(err: unknown, repo: string, base: string): Error {
+    const status = (err as { status?: number } | null)?.status;
+    const message = err instanceof Error ? err.message : String(err);
+    if (status === 403 || /not accessible by personal access token/i.test(message)) {
+      return new ValidationError(
+        `GitHub rejected the export to "${repo}". The export commits "${WORKFLOW_PATH}", so the GitHub token needs ` +
+          `BOTH "Contents: Read and write" AND "Workflows: Read and write" on a fine-grained PAT ` +
+          `(or the "repo" + "workflow" scopes on a classic token) for "${repo}". Grant the missing permission and retry — ` +
+          `or use "Copy files as a zip", which needs no token.`,
+      );
+    }
+    if (status === 404) {
+      return new ValidationError(
+        `GitHub could not find "${repo}" or its base branch "${base}". Check the owner/name and that the token can access the repository.`,
+      );
+    }
+    return err instanceof Error ? err : new Error(message);
   }
 
   /**
