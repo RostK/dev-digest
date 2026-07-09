@@ -1,0 +1,8 @@
+{
+  "name": "dev-digest",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "verify:l06": "cd server && pnpm verify:l06"
+  }
+}

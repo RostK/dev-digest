@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
-import { EvalRun, EvalOwnerKind, Conformance, Provider, CiFailOn } from './knowledge.js';
+import {
+  EvalRun,
+  EvalOwnerKind,
+  EvalExpectation,
+  Conformance,
+  Provider,
+  CiFailOn,
+} from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
@@ -24,10 +31,30 @@ export const EvalCaseInput = z.object({
   input_diff: z.string().default(''),
   input_files: z.unknown().nullish(),
   input_meta: z.unknown().nullish(),
-  expected_output: z.unknown(),
+  expected_output: EvalExpectation,
   notes: z.string().nullish(),
 });
 export type EvalCaseInput = z.infer<typeof EvalCaseInput>;
+
+/** An eval case row enriched with its latest-run state, for the case-list UI. */
+export const EvalCaseWithState = z.object({
+  id: z.string(),
+  owner_kind: EvalOwnerKind,
+  owner_id: z.string(),
+  name: z.string(),
+  input_diff: z.string(),
+  input_files: z.unknown(),
+  input_meta: z.unknown(),
+  expected_output: EvalExpectation,
+  notes: z.string().nullish(),
+  /** Pass/fail of the case's most recent run; null if it has never been run. */
+  last_run_pass: z.boolean().nullable(),
+  /** Number of findings the case's `expected_output` specifies. */
+  expected_count: z.number().int(),
+  /** Number of findings the most recent run actually produced. */
+  actual_count: z.number().int(),
+});
+export type EvalCaseWithState = z.infer<typeof EvalCaseWithState>;
 
 /** A persisted eval run row (one execution of a case), returned by the API. */
 export const EvalRunRecord = z.object({
@@ -87,6 +114,64 @@ export const EvalDashboard = z.object({
   alert: z.string().nullable(),
 });
 export type EvalDashboard = z.infer<typeof EvalDashboard>;
+
+/**
+ * One "run group" = a full eval-suite execution against a single agent version
+ * (all cases for that owner run together at one `ran_at`). Aggregates the same
+ * metrics as `EvalRun` but scoped to the batch, plus which agent version + what
+ * it cost — the row shape driving the run-history list, the compare view, and
+ * the global dashboard's `recent_runs`.
+ */
+export const EvalRunGroup = z.object({
+  group_id: z.string(),
+  agent_version: z.number().int(),
+  ran_at: z.string(),
+  recall: z.number(),
+  precision: z.number(),
+  citation_accuracy: z.number(),
+  traces_passed: z.number().int(),
+  traces_total: z.number().int(),
+  cost_usd: z.number().nullable(),
+});
+export type EvalRunGroup = z.infer<typeof EvalRunGroup>;
+
+/**
+ * Side-by-side comparison of two run groups (e.g. before/after a prompt edit).
+ * `delta` = `b - a` for each metric; the system prompts are included so the UI
+ * can diff the actual wording change that produced the metric delta.
+ */
+export const EvalCompare = z.object({
+  a: EvalRunGroup,
+  b: EvalRunGroup,
+  delta: z.object({
+    recall: z.number(),
+    precision: z.number(),
+    citation_accuracy: z.number(),
+    cost_usd: z.number().nullable(),
+  }),
+  a_system_prompt: z.string(),
+  b_system_prompt: z.string(),
+});
+export type EvalCompare = z.infer<typeof EvalCompare>;
+
+/** Per-agent summary row on the global (workspace-wide) eval dashboard. */
+export const EvalAgentSummaryRow = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+  agent_version: z.number().int(),
+  recall: z.number(),
+  precision: z.number(),
+  citation_accuracy: z.number(),
+  run_count: z.number().int(),
+});
+export type EvalAgentSummaryRow = z.infer<typeof EvalAgentSummaryRow>;
+
+/** Workspace-wide eval dashboard: recent run groups across all agents + a per-agent rollup. */
+export const GlobalEvalDashboard = z.object({
+  recent_runs: z.array(EvalRunGroup),
+  summary_rows: z.array(EvalAgentSummaryRow),
+});
+export type GlobalEvalDashboard = z.infer<typeof GlobalEvalDashboard>;
 
 // ===========================================================================
 // Compose Review

@@ -12,6 +12,12 @@ import { DIM, RESET } from "./ansi.js";
 
 const EVALS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+// On Windows "pnpm" is the pnpm.cmd shim, a shell script — spawning it directly without a shell
+// throws EINVAL (.cmd/.bat files aren't native executables, cmd.exe must interpret them), so
+// shell:true is required here, not optional. Node's DEP0190 warning about unescaped args is a
+// blanket warning for shell:true + array args; it's a non-issue for this internal dev tool, whose
+// args are always static eval file paths / vitest flags with no spaces or shell metacharacters.
+const WIN32 = process.platform === "win32";
 
 /** How many test cases the pattern matches, via `vitest list` (no model calls). null on error. */
 export function countTests(vitestArgs: string[]): number | null {
@@ -20,6 +26,7 @@ export function countTests(vitestArgs: string[]): number | null {
       cwd: EVALS_DIR,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
+      shell: WIN32,
     });
     const n = out.split("\n").filter((l) => l.includes(" > ")).length;
     return n || null;
@@ -37,6 +44,7 @@ export function runVitestOnce(label: string, vitestArgs: string[], extraEnv: Rec
       cwd: EVALS_DIR,
       env: { ...process.env, EVAL_QUIET: "1", ...extraEnv },
       stdio: ["ignore", "pipe", "pipe"],
+      shell: WIN32,
     });
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (out += d));

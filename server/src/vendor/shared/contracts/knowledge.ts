@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity, FindingCategory } from './findings.js';
 
 /**
  * Conformance, Onboarding, Eval, Memory, Conventions, Skills,
@@ -93,6 +94,33 @@ export type EvalRun = z.infer<typeof EvalRun>;
 export const EvalOwnerKind = z.enum(['skill', 'agent']);
 export type EvalOwnerKind = z.infer<typeof EvalOwnerKind>;
 
+/**
+ * A single expected finding within an `EvalExpectation`. Reuses the shared
+ * `Severity`/`FindingCategory` enums (see `./findings.js`) so an eval case's
+ * expectation is checkable against a real `Finding` without a parallel enum.
+ */
+export const EvalExpectedFinding = z.object({
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  severity: Severity.nullish(),
+  category: FindingCategory.nullish(),
+  title: z.string().nullish(),
+});
+export type EvalExpectedFinding = z.infer<typeof EvalExpectedFinding>;
+
+/**
+ * The grounded, checkable shape of `EvalCase.expected_output` (tightened from
+ * `z.unknown()`). `must_find` asserts the agent SHOULD raise a finding matching
+ * each entry in `findings`; `must_not_flag` asserts it should NOT raise a
+ * finding at any of those locations (a negative/no-false-positive case).
+ */
+export const EvalExpectation = z.object({
+  kind: z.enum(['must_find', 'must_not_flag']),
+  findings: z.array(EvalExpectedFinding),
+});
+export type EvalExpectation = z.infer<typeof EvalExpectation>;
+
 export const EvalCase = z.object({
   id: z.string(),
   owner_kind: EvalOwnerKind,
@@ -101,7 +129,7 @@ export const EvalCase = z.object({
   input_diff: z.string(),
   input_files: z.unknown(),
   input_meta: z.unknown(),
-  expected_output: z.unknown(),
+  expected_output: EvalExpectation,
   notes: z.string().nullish(),
 });
 export type EvalCase = z.infer<typeof EvalCase>;

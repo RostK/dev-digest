@@ -1,0 +1,202 @@
+# Harness evals on CI — MANUAL-ONLY.
+#
+# WHAT IT DOES
+# Runs the evals/ harness suites against OpenRouter, ONLY when a human triggers it from the
+# Actions "Run workflow" dialog (workflow_dispatch). There is deliberately NO pull_request
+# trigger: every eval suite costs real OpenRouter credit, and the previous per-push gate re-ran
+# ALL implicated suites on EVERY push to an eval-touching PR — ~$10 burned in one review cycle
+# (2026-07-07), twice exhausting the capped key so hard that even unrelated checks 402/403-failed.
+# Evals are now an on-demand tool: run them after changing a skill, an agent, CLAUDE.md, or the
+# eval engine, and before merging such a PR.
+#
+# A manual run executes EVERY suite that exists on the selected ref:
+#   evals/skills/<name>/   → skill (content) tier — cheap, no proxy
+#   evals/agents/<name>/   → agent (tool) tier
+#   evals/workflow/        → workflow tier (live harness; advisory, continue-on-error)
+#
+# (evals/scripts/ci-detect.mjs — the old diff→suites mapper — remains for local use.)
+#
+# MODELS — everything runs on OpenRouter (EVAL_BACKEND=openrouter). No app UI: the model is a job
+# parameter, editable in each job's `env:` block below or overridable per-run from the Actions
+# "Run workflow" dialog (workflow_dispatch inputs). Split by tier:
+#   - skills (content only)       → a cheap direct-OpenRouter model (DeepSeek V3). No proxy.
+#   - agents + workflow (tools)   → Claude Haiku 4.5 via OpenRouter's Anthropic Skin. The Claude
+#     Agent SDK speaks the Anthropic wire protocol, which the Skin serves natively for anthropic/*
+#     slugs — so these tiers hit OpenRouter DIRECTLY (no LiteLLM proxy). A Claude-class model also
+#     reliably drives the subagent-dispatch traces the tool tiers assert on; cheaper non-Anthropic
+#     models under-drive them (measured) and would need the bundled evals/proxy sidecar to run at all.
+#
+# SECRET: set OPENROUTER_API_KEY in the repo's Actions secrets.
+name: harness evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      skills_model:
+        description: 'OpenRouter slug for the skills (content) tier'
+        default: 'deepseek/deepseek-chat'
+      tool_model:
+        description: 'OpenRouter slug for the agent + workflow (tool) tiers (anthropic/* → no proxy)'
+        default: 'anthropic/claude-haiku-4.5'
+      judge_model:
+        description: 'OpenRouter slug for the LLM judge'
+        default: 'google/gemini-2.5-flash'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-evals-${{ github.ref }}
+  cancel-in-progress: true
+
+# EVAL_BACKEND is a constant every job/step inherits. The MODEL SWITCH lives in each job's `env:`
+# below (skills vs tool tiers use different defaults) and in the workflow_dispatch inputs above —
+# change a default in one place and the Run-workflow dialog stays in sync.
+env:
+  EVAL_BACKEND: openrouter
+
+jobs:
+  # ── 1. Enumerate every suite that exists on this ref ─────────────────────────
+  detect:
+    name: enumerate eval suites
+    runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.detect.outputs.skills }}
+      agents: ${{ steps.detect.outputs.agents }}
+      run_workflow: ${{ steps.detect.outputs.run_workflow }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Enumerate eval suites
+        id: detect
+        working-directory: evals
+        # A manual run means "check everything now" — list every suite directory
+        # rather than diffing anything. A dir without an .eval.ts simply has no
+        # tests for vitest to collect, so listing dirs IS the has-evals check.
+        run: |
+          list_dirs() {
+            node -e "
+              const fs = require('fs');
+              const dir = process.argv[1];
+              const names = fs.existsSync(dir)
+                ? fs.readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name)
+                : [];
+              process.stdout.write(JSON.stringify(names));
+            " "$1"
+          }
+          skills=$(list_dirs skills)
+          agents=$(list_dirs agents)
+          echo "skills=$skills" >> "$GITHUB_OUTPUT"
+          echo "agents=$agents" >> "$GITHUB_OUTPUT"
+          if [ -d workflow ]; then echo "run_workflow=true" >> "$GITHUB_OUTPUT"; else echo "run_workflow=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Job summary
+        if: always()
+        env:
+          SKILLS: ${{ steps.detect.outputs.skills }}
+          AGENTS: ${{ steps.detect.outputs.agents }}
+          RUN_WORKFLOW: ${{ steps.detect.outputs.run_workflow }}
+        run: |
+          {
+            echo '### Harness eval suites (manual run — everything on this ref)'
+            echo ''
+            echo "- skills: \`${SKILLS}\`"
+            echo "- agents: \`${AGENTS}\`"
+            echo "- workflow tier: \`${RUN_WORKFLOW}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── 2. Skill (content) tier — cheap DeepSeek, direct OpenRouter, no proxy ────
+  skills:
+    name: skill · ${{ matrix.skill }}
+    needs: detect
+    if: needs.detect.outputs.skills != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        skill: ${{ fromJSON(needs.detect.outputs.skills) }}
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.skills_model || 'deepseek/deepseek-chat' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install eval deps
+        working-directory: evals
+        run: pnpm install --frozen-lockfile
+      - name: Run skill eval
+        working-directory: evals
+        # Trailing slash anchors the path filter so "architecture-reviewer" can't also match
+        # "architecture-reviewer-lite" (substring), and one skill's dir is selected exactly.
+        run: pnpm exec vitest run "skills/${{ matrix.skill }}/"
+
+  # ── 3. Agent (tool) tier — Claude Haiku via OpenRouter's Anthropic Skin (no proxy) ──
+  agents:
+    name: agent · ${{ matrix.agent }}
+    needs: detect
+    if: needs.detect.outputs.agents != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        agent: ${{ fromJSON(needs.detect.outputs.agents) }}
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.tool_model || 'anthropic/claude-haiku-4.5' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install eval deps
+        working-directory: evals
+        run: pnpm install --frozen-lockfile
+      - name: Run agent eval
+        working-directory: evals
+        run: pnpm exec vitest run "agents/${{ matrix.agent }}/"
+
+  # ── 4. Workflow tier — live harness on Claude Haiku via the Anthropic Skin (no proxy) ──
+  # ADVISORY (continue-on-error): this tier drives the REAL harness (subagent dispatch, skill
+  # activation, CLAUDE.md routing) in a live session, so it is inherently the flakiest, most
+  # model-dependent, and most expensive tier. It also carries a deliberate cheap-model canary —
+  # the engineering-insights DESCRIPTION-activation case, which the skill's own SKILL.md documents
+  # as unreliable without its Stop hook and which a cheap model won't self-invoke. Its result
+  # REPORTS but never fails the run.
+  workflow:
+    name: workflow tier (advisory)
+    needs: detect
+    if: needs.detect.outputs.run_workflow == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      EVAL_MODEL: ${{ inputs.tool_model || 'anthropic/claude-haiku-4.5' }}
+      EVAL_JUDGE_MODEL: ${{ inputs.judge_model || 'google/gemini-2.5-flash' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install eval deps
+        working-directory: evals
+        run: pnpm install --frozen-lockfile
+      - name: Run workflow evals
+        working-directory: evals
+        run: pnpm eval:workflow

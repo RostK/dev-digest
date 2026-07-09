@@ -32,13 +32,34 @@ function parseVerdict(text: string): Verdict["results"] {
   return obj.results;
 }
 
-/** Judge an output against a list of practices. Model defaults to the stronger judge family. */
+/**
+ * Judge an output against a list of practices. Model defaults to the stronger judge family.
+ *
+ * Retries the whole judge call on an unparseable verdict: thinking models (e.g. Gemini 2.5
+ * Flash) occasionally burn the completion budget on reasoning and return JSON truncated
+ * before the closing `}` — a one-off formatting flake, not a scoring signal, so one failed
+ * response must not fail the eval case. A persistent error (bad key, hard 4xx) still throws
+ * after the retries are exhausted.
+ */
 export async function llmJudge(output: string, practices: string[], model = EVAL_JUDGE_MODEL): Promise<Verdict> {
   const listed = practices.map((p, i) => `${i + 1}. ${p}`).join("\n");
   const prompt = `${JUDGE_RUBRIC}\n\n## PRACTICES\n${listed}\n\n## OUTPUT\n${output}\n\nReturn the JSON now.`;
-  const res = await runContent(prompt, { allowedTools: [], maxTurns: 1, model });
-  const results = parseVerdict(res.text);
-  const total = results.length || 1;
-  const passed = results.filter((r) => r.passed).length;
-  return { results, passed, total, score: passed / total };
+  const attempts = 3;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    const res = await runContent(prompt, { allowedTools: [], maxTurns: 1, model });
+    try {
+      const results = parseVerdict(res.text);
+      const total = results.length || 1;
+      const passed = results.filter((r) => r.passed).length;
+      return { results, passed, total, score: passed / total };
+    } catch (err) {
+      lastErr = err;
+      if (attempt < attempts) {
+        // eslint-disable-next-line no-console
+        console.warn(`llmJudge: unparseable verdict (attempt ${attempt}/${attempts}) — retrying`);
+      }
+    }
+  }
+  throw lastErr;
 }

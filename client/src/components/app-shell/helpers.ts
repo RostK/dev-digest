@@ -35,7 +35,7 @@ export function activeKeyFor(pathname: string): string {
   if (pathname.includes("/pulls")) return "pulls";
   if (pathname.startsWith("/skills")) return "skills";
   if (pathname.startsWith("/agents")) return "agents";
-  if (pathname.startsWith("/eval")) return "eval";
+  if (pathname.startsWith("/evals")) return "evals";
   if (pathname.startsWith("/memory")) return "memory";
   if (pathname.startsWith("/agent-performance")) return "agent-performance";
   if (pathname.startsWith("/ci-runs")) return "ci-runs";

@@ -24,6 +24,8 @@ by that run's retro (older runs predate cache-hit / tool-call tracking — fille
 | 2026-07-02 | write-spec + plan (SPEC-04) | 3 / 2 | ~610,555 | ? | ? | n/a | — | ~31% of known tokens wasted (killed planner + duplicate resume) | [↗](RETRO-2026-07-02-plan-spec04.md) |
 | 2026-07-03 | implement (SPEC-04 Brief) | 22 / 0 | 2,540,688 | ? | 857 | 1 | — | 5-finder /code-review fan-out was the top token amplifier; 2 post-verify feature iterations later reverted | [↗](RETRO-2026-07-03-implement-spec04.md) |
 | 2026-07-04 | ad-hoc (brief fixes — Explore fan-out) | 0 / 3 | unknown | ? | ? | n/a | — | 3 Explore agents launched async then lost to a plan-mode transition (0-byte journals); all exploration redone in main thread | [↗](RETRO-2026-07-04-brief-fixes.md) |
+| 2026-07-06 | write-spec (SPEC-05 eval-pipeline) | 5 / 0 | 358,898 | ? | 186 | n/a | 1.43× | first zero-waste, fully-measured run (no nesting → firm total); rework = `verify:l06` clarification reversal caught at spec + edited in-thread | [↗](RETRO-2026-07-06-write-spec-spec05.md) |
+| 2026-07-06 | plan-implementation (SPEC-05) | 1 / 0 | 146,191 | ? | 33 | n/a | 1.0 | context pack held planner cost flat (146k vs SPEC-02's 148k) despite a bigger feature; 2 decisions no-reversal; pack's `rangeIntersects` reuse claim was inaccurate (private) → became decision R1 | [↗](RETRO-2026-07-06-plan-spec05.md) |
 
 ## Reading the trend so far
 - **Token spend is climbing with fan-out width**: 148k (1 agent) → ~721k (7) → 2.54M (22). The jump to

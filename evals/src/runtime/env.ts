@@ -9,6 +9,8 @@
  * only the model inference is redirected. Select with EVAL_BACKEND=openrouter.
  */
 
+import { EVAL_MAX_OUTPUT_TOKENS } from "../config.js";
+
 const BACKEND = process.env.EVAL_BACKEND ?? "subscription";
 
 /**
@@ -25,6 +27,12 @@ const BACKEND = process.env.EVAL_BACKEND ?? "subscription";
  */
 export function subscriptionEnv(): Record<string, string> {
   const env = { ...process.env } as Record<string, string>;
+
+  // Cap the SDK's per-request output-token ask (it defaults to 64k). Bounds the worst-case
+  // cost of any single call and stops a low-credit metered key from 402ing the request
+  // outright ("requires more credits, or fewer max_tokens"). An explicit value in the
+  // caller's environment wins.
+  env.CLAUDE_CODE_MAX_OUTPUT_TOKENS ??= String(EVAL_MAX_OUTPUT_TOKENS);
 
   if (BACKEND === "openrouter") {
     const key = process.env.OPENROUTER_API_KEY;

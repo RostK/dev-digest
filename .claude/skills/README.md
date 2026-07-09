@@ -18,6 +18,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 | [engineering-insights](engineering-insights/SKILL.md) | Workflow | Capture durable learnings to per-module INSIGHTS.md (append-only) |
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow | Pre-PR gate: routes the diff to the matching skills, blocks push/PR on any critical |
+| [dependencies-checker](dependencies-checker/SKILL.md) | Workflow | Audits deps across all 4 packages: sizes, Mermaid diagram, duplicates, cleanup recs |
 
 ## What Are Skills?
 

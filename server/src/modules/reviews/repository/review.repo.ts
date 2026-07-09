@@ -66,7 +66,18 @@ export async function reviewsForPull(
     .orderBy(desc(t.reviews.createdAt));
   if (reviews.length === 0) return [];
   const ids = reviews.map((r) => r.id);
-  const findings = await db.select().from(t.findings).where(inArray(t.findings.reviewId, ids));
+  // Deterministic order matters: without ORDER BY, Postgres returns heap order,
+  // and an accept/dismiss UPDATE rewrites the row's tuple (MVCC) — moving that
+  // finding to the END of the next read. The UI list then visibly re-sorts right
+  // as the user acts on a finding, sliding a DIFFERENT card's buttons under
+  // their cursor (seen live: a stray "Turn into eval case" click). `id` is the
+  // only immutable orderable column (no created_at on findings); the client
+  // re-sorts by severity anyway, so within-severity order just has to be STABLE.
+  const findings = await db
+    .select()
+    .from(t.findings)
+    .where(inArray(t.findings.reviewId, ids))
+    .orderBy(t.findings.id);
   return reviews.map((review) => ({
     review,
     findings: findings.filter((f) => f.reviewId === review.id),
