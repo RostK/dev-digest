@@ -19,7 +19,10 @@
       "source": "Source",
       "findings": "Findings",
       "cost": "Cost",
-      "status": "Status"
+      "status": "Status",
+      "repo": "Repo",
+      "target": "Target",
+      "link": "Link"
     },
     "view": "View",
     "status": {
@@ -35,8 +38,11 @@
     "thisAgent": "this agent",
     "back": "Back",
     "continue": "Continue",
+    "done": "Done",
     "install": "Install",
     "installing": "Installing…",
+    "previewError": "Couldn’t generate the export preview.",
+    "installError": "Couldn’t complete the export.",
     "steps": {
       "target": "Target",
       "preview": "Preview",
@@ -54,6 +60,7 @@
       "cliDesc": "devdigest review --pr"
     },
     "recommended": "recommended",
+    "comingSoon": "Coming soon",
     "repoLabel": "Target repository",
     "repoHint": "owner/name — the repo to add the workflow to",
     "repoPlaceholder": "acme/payments-api",
@@ -61,6 +68,16 @@
     "generating": "Generating…",
     "editable": "editable",
     "triggerLabel": "Trigger",
+    "triggers": {
+      "opened": "Opened",
+      "synchronize": "Synchronize (new commits)",
+      "reopened": "Reopened"
+    },
+    "secretsExpectedTitle": "Secrets expected",
+    "secretStatus": {
+      "notSet": "not set",
+      "ready": "ready"
+    },
     "postResultsLabel": "Post results as",
     "postAs": {
       "githubReview": "GitHub review",
@@ -72,7 +89,14 @@
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
     "ownerRepo": "owner/repo",
-    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
+    "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs.",
+    "openPr": "Open a PR",
+    "copyZip": "Copy files as a zip",
+    "prOpened": "Pull request opened",
+    "viewPr": "View pull request",
+    "filesReturnedTitle": "Files ready to copy",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "ciTab": {
     "heading": "Continuous Integration",
@@ -82,7 +106,20 @@
     "update": "Update CI",
     "noRepo": "Connect a repository first",
     "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
-    "installed": "installed {date}"
+    "emptyTitle": "Not deployed to CI",
+    "installed": "installed {date}",
+    "sync": "Sync",
+    "syncing": "Syncing…",
+    "runsHeading": "Run history",
+    "noRuns": "No runs yet. Click Sync after the workflow runs in GitHub Actions.",
+    "failCiOn": "Fail CI on",
+    "failCiOnHint": "When should the CI review request changes and fail the check? Decided by finding severity.",
+    "failCiOnOptions": {
+      "never": "Never — comment only",
+      "critical": "Critical findings (recommended)",
+      "warning": "Warning or critical",
+      "any": "Any finding"
+    }
   },
   "publishDialog": {
     "title": "Publish to CI",
