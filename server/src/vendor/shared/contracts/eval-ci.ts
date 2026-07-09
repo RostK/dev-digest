@@ -303,6 +303,8 @@ export const CiRun = z.object({
   source: z.string().nullable(),
   agent: z.string().nullish(),
   duration_s: z.number().nullish(),
+  repo: z.string().nullish(),
+  target_type: CiTarget.nullish(),
 });
 export type CiRun = z.infer<typeof CiRun>;
 
