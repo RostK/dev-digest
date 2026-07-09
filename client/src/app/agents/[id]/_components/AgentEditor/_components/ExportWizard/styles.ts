@@ -1,0 +1,118 @@
+import type { CSSProperties } from "react";
+
+/** Co-located styles for the Export Wizard (4-step modal). CSS design tokens
+ *  only — no Tailwind utility classes. */
+export const s = {
+  stepsBar: { padding: "16px 24px 4px" } satisfies CSSProperties,
+  body: { padding: 24, display: "flex", flexDirection: "column", gap: 20 } satisfies CSSProperties,
+  footer: { display: "flex", justifyContent: "space-between", alignItems: "center" } satisfies CSSProperties,
+
+  section: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  h3: { fontSize: 13, fontWeight: 700, color: "var(--text-secondary)" } satisfies CSSProperties,
+  hint: { fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 } satisfies CSSProperties,
+
+  cardGrid: { display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 } satisfies CSSProperties,
+  card: (active: boolean, functional: boolean): CSSProperties => ({
+    display: "flex",
+    flexDirection: "column",
+    gap: 6,
+    padding: 14,
+    borderRadius: 10,
+    border: `1px solid ${active ? "var(--accent)" : "var(--border-strong)"}`,
+    background: active ? "var(--bg-hover)" : "var(--bg-elevated)",
+    cursor: functional ? "pointer" : "not-allowed",
+    opacity: functional ? 1 : 0.55,
+    textAlign: "left",
+  }),
+  cardHeader: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  cardTitle: { fontSize: 14, fontWeight: 700, flex: 1 } satisfies CSSProperties,
+  cardDesc: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+
+  fileList: { display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
+  fileRow: { border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" } satisfies CSSProperties,
+  fileHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 12px",
+    background: "var(--bg-surface)",
+    fontSize: 12.5,
+  } satisfies CSSProperties,
+  filePath: { flex: 1, fontFamily: "var(--font-mono)" } satisfies CSSProperties,
+  fileBody: {
+    margin: 0,
+    padding: 12,
+    fontSize: 12,
+    maxHeight: 160,
+    overflow: "auto",
+    background: "var(--bg-base)",
+    color: "var(--text-secondary)",
+    fontFamily: "var(--font-mono)",
+    whiteSpace: "pre-wrap",
+  } satisfies CSSProperties,
+  editableTextarea: {
+    display: "block",
+    width: "100%",
+    minHeight: 180,
+    resize: "vertical",
+    padding: 12,
+    fontSize: 12,
+    fontFamily: "var(--font-mono)",
+    border: "none",
+    outline: "none",
+    background: "var(--bg-base)",
+    color: "var(--text-primary)",
+  } satisfies CSSProperties,
+
+  secretsPanel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    padding: 12,
+  } satisfies CSSProperties,
+  secretRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    fontSize: 13,
+  } satisfies CSSProperties,
+
+  triggerRow: { display: "flex", flexWrap: "wrap", gap: 16 } satisfies CSSProperties,
+
+  installCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    border: "1px solid var(--border-strong)",
+    borderRadius: 10,
+    padding: 16,
+  } satisfies CSSProperties,
+  installActions: { display: "flex", gap: 10 } satisfies CSSProperties,
+  resultBox: {
+    marginTop: 4,
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid var(--ok)",
+    background: "var(--bg-hover)",
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+  } satisfies CSSProperties,
+  errorBox: {
+    marginTop: 4,
+    padding: 12,
+    borderRadius: 8,
+    border: "1px solid var(--crit)",
+    color: "var(--crit)",
+    fontSize: 13,
+  } satisfies CSSProperties,
+  resultFileRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 12.5,
+    fontFamily: "var(--font-mono)",
+  } satisfies CSSProperties,
+} as const;
