@@ -40,6 +40,13 @@ dual-vendored `@devdigest/shared` contracts.
    import graph, it is a NIT — suppress it.
 3. **Ground every finding.** Cite an exact `path:line` and the import/type reference. A claim
    with no citation is inadmissible. Never assert an import you have not read; never infer intent.
+4. **No edge, no violation — never fabricate.** A VIOLATION requires a specific NEW or CHANGED
+   cross-layer import/type edge you can quote from the diff. A change that adds no such edge — a
+   pure rename, a local-variable change, a moved line, a comment — has **zero** architecture
+   violations: report none and recommend Approve. Never escalate a naming collision, a duplicate
+   identifier, a formatting choice, or a runtime/testing concern into a VIOLATION (those are NITs
+   per rule 2, or out of scope). When you cannot pin a finding to a broken documented invariant
+   with a cited edge, the honest output is "no violations found", not an invented one.
 
 ## What to check — checklist
 

@@ -21,6 +21,8 @@ import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
 import { githubBlobUrl } from "@/lib/github-urls";
+import { useCreateEvalFromFinding } from "@/lib/hooks/evals";
+import { useToast } from "@/lib/toast";
 import { s } from "./styles";
 
 export function FindingCard({
@@ -41,6 +43,7 @@ export function FindingCard({
   headSha?: string | null;
 }) {
   const t = useTranslations("prReview");
+  const tEvals = useTranslations("evals");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
@@ -50,10 +53,12 @@ export function FindingCard({
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
+  const createEvalCase = useCreateEvalFromFinding();
+  const toast = useToast();
 
   return (
-    <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
-      <div onClick={() => setExpanded((e) => !e)} style={s.header}>
+    <div data-finding-id={f.id} style={s.card(!!focused, sevColor)}>
+      <div onClick={() => setExpanded((e) => !e)} style={s.header(muted)}>
         <div style={s.badgeWrap}>
           <SeverityBadge severity={f.severity as Severity} compact />
         </div>
@@ -76,17 +81,19 @@ export function FindingCard({
 
       {expanded && (
         <div style={s.body}>
-          <div style={s.prose}>
-            <Markdown>{f.rationale}</Markdown>
-          </div>
-          {f.suggestion && (
-            <div style={s.suggestionWrap}>
-              <div style={s.suggestionLabel}>{t("finding.suggestedFix")}</div>
-              <div style={s.prose}>
-                <Markdown>{f.suggestion}</Markdown>
-              </div>
+          <div style={s.dim(muted)}>
+            <div style={s.prose}>
+              <Markdown>{f.rationale}</Markdown>
             </div>
-          )}
+            {f.suggestion && (
+              <div style={s.suggestionWrap}>
+                <div style={s.suggestionLabel}>{t("finding.suggestedFix")}</div>
+                <div style={s.prose}>
+                  <Markdown>{f.suggestion}</Markdown>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div style={s.actions}>
             <Button
@@ -109,6 +116,23 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {muted && (
+              <Button
+                kind="ghost"
+                size="sm"
+                icon={createEvalCase.isSuccess ? "Check" : "FlaskConical"}
+                loading={createEvalCase.isPending}
+                disabled={createEvalCase.isPending || createEvalCase.isSuccess}
+                onClick={() =>
+                  createEvalCase.mutate(
+                    { findingId: f.id },
+                    { onSuccess: () => toast.success(tEvals("caseCreatedToast")) },
+                  )
+                }
+              >
+                {createEvalCase.isSuccess ? tEvals("caseCreatedLabel") : tEvals("turnIntoEvalCase")}
+              </Button>
+            )}
           </div>
         </div>
       )}

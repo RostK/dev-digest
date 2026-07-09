@@ -298,18 +298,13 @@ export class ReviewRunExecutor {
       const blockers = countBlockers(keptFindings, agent.ciFailOn);
 
       // ---- Observability: agent_runs + ONE run_traces document --------------
-      await this.repo.completeAgentRun(runId, {
-        status: 'done',
-        durationMs,
-        tokensIn,
-        tokensOut,
-        findingsCount: findingRows.length,
-        grounding,
-        score: outcome.review.score,
-        blockers,
-        error: null,
-      });
-
+      // Persist the trace BEFORE marking the run `done`. `agent_runs.status`
+      // flipping to a terminal value is the signal consumers poll on (tests via
+      // `waitForPrRuns`, the UI via SSE `runBus.complete`) before fetching the
+      // trace — so the trace must already be committed by then, or that read
+      // races and sees no `run_traces` row (e.g. `specs_read` comes back
+      // undefined). Trace first → completeAgentRun → complete guarantees the
+      // invariant "status is terminal ⟹ trace is persisted".
       const trace: RunTrace = {
         config: {
           agent: agent.name,
@@ -345,8 +340,20 @@ export class ReviewRunExecutor {
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
       };
-      runLog.info('Run complete; trace persisted');
       await this.repo.saveRunTrace(runId, trace);
+
+      await this.repo.completeAgentRun(runId, {
+        status: 'done',
+        durationMs,
+        tokensIn,
+        tokensOut,
+        findingsCount: findingRows.length,
+        grounding,
+        score: outcome.review.score,
+        blockers,
+        error: null,
+      });
+      runLog.info('Run complete; trace persisted');
       this.container.runBus.complete(runId);
 
       return { review, findings: findingRows, grounding, raw: outcome.review };

@@ -37,7 +37,7 @@ export type AgentCase = QualityCase;
 
 /** A trace-asserted workflow case — a discriminated union routed by `kind`. */
 export type WorkflowCase =
-  | { kind: "dispatch"; name: string; prompt: string; expectSubagent: string; maxTurns?: number }
+  | { kind: "dispatch"; name: string; prompt: string; expectSubagent: string; maxTurns?: number; testTimeoutMs?: number }
   | {
       kind: "activation";
       name: string;
@@ -45,6 +45,7 @@ export type WorkflowCase =
       skill: string;
       shouldActivate: boolean;
       maxTurns?: number;
+      testTimeoutMs?: number;
     }
   | {
       kind: "contrast";
@@ -53,6 +54,7 @@ export type WorkflowCase =
       expectFileRead: string;
       tools?: string[];
       maxTurns?: number;
+      testTimeoutMs?: number;
     }
   | {
       // A single-session composite: run ONE workflowTask and assert several trace facets at once.
@@ -66,12 +68,20 @@ export type WorkflowCase =
       expectSkills?: string[];
       expectFilesRead?: string[];
       maxTurns?: number;
+      testTimeoutMs?: number;
     };
+
+// filesRead stores whatever `file_path` the model's Read tool call used verbatim — on Windows
+// that's a backslash-separated absolute path (C:\Users\...\server\README.md), while every case
+// expects a forward-slash substring (server/README.md). A literal .includes() can never match on
+// Windows, so every path comparison in this file normalizes both sides to forward slashes first.
+const toPosix = (p: string) => p.replaceAll("\\", "/");
+const readIncludes = (reads: string[], needle: string) => reads.some((f) => toPosix(f).includes(toPosix(needle)));
 
 /** Did a skill engage? Either an explicit Skill tool-call, or reading its SKILL.md. */
 export function activated(result: Result, skill: string): boolean {
   const bySkill = result.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`));
-  const byRead = result.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`));
+  const byRead = readIncludes(result.filesRead, `skills/${skill}/SKILL.md`);
   return bySkill || byRead;
 }
 
@@ -117,7 +127,7 @@ export const runAgentCases = (agent: string, cases: AgentCase[]) => runQualityCa
 
 export function runWorkflowCases(cases: WorkflowCase[]): void {
   for (const c of cases) {
-    test(c.name, async () => {
+    test(c.name, { timeout: c.testTimeoutMs }, async () => {
       if (c.kind === "dispatch") {
         // Stop the moment the subagent is launched — no need to wait out its nested session.
         const expect1 = c.expectSubagent;
@@ -126,21 +136,27 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
           stopWhen: (p) => p.subagents.includes(expect1),
         });
         logTrace(c.name, result);
+        // Compute the pass condition up front so the recorded outcome matches the assertion
+        // (record() runs in finally, before the expect resolves) — see RecordData.passed.
+        const passed = result.subagents.includes(c.expectSubagent);
         try {
           expect(result.subagents, `subagents: ${result.subagents.join(", ")}`).toContain(c.expectSubagent);
         } finally {
-          record(c.name, { result });
+          record(c.name, { result, passed });
         }
       } else if (c.kind === "activation") {
         const result = await workflowTask(c.prompt, { maxTurns: c.maxTurns });
         logTrace(c.name, result);
+        // isError (e.g. a negative case that hits maxTurns while exploring) must NOT count as a
+        // failure here — the only thing that matters is whether the skill engaged as expected.
+        const passed = activated(result, c.skill) === c.shouldActivate;
         try {
           expect(
             activated(result, c.skill),
             `skills: ${result.skillsInvoked.join(", ")} | reads: ${result.filesRead.join(", ")}`,
           ).toBe(c.shouldActivate);
         } finally {
-          record(c.name, { result });
+          record(c.name, { result, passed });
         }
       } else if (c.kind === "trace") {
         // One session, many asserts — every provided expectation is checked against the same trace.
@@ -151,15 +167,22 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         const files = c.expectFilesRead ?? [];
         const skillEngaged = (p: { skillsInvoked: string[]; filesRead: string[] }, skill: string) =>
           p.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`)) ||
-          p.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`));
+          readIncludes(p.filesRead, `skills/${skill}/SKILL.md`);
         const result = await workflowTask(c.prompt, {
           maxTurns: c.maxTurns,
           stopWhen: (p) =>
             subs.every((s) => p.subagents.includes(s)) &&
             skls.every((s) => skillEngaged(p, s)) &&
-            files.every((f) => p.filesRead.some((r) => r.includes(f))),
+            files.every((f) => readIncludes(p.filesRead, f)),
         });
         logTrace(c.name, result);
+        // Every expectation must hold AND the session must not have errored (a trace stops early
+        // once all evidence is in, so isError here means it ran out before satisfying them).
+        const passed =
+          subs.every((s) => result.subagents.includes(s)) &&
+          skls.every((s) => activated(result, s)) &&
+          files.every((f) => readIncludes(result.filesRead, f)) &&
+          !result.isError;
         try {
           for (const sub of c.expectSubagents ?? []) {
             expect(result.subagents, `subagents: ${result.subagents.join(", ")}`).toContain(sub);
@@ -172,13 +195,13 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
           }
           for (const file of c.expectFilesRead ?? []) {
             expect(
-              result.filesRead.some((f) => f.includes(file)),
+              readIncludes(result.filesRead, file),
               `${file} not read | reads: ${result.filesRead.join(", ")}`,
             ).toBe(true);
           }
           expect(result.isError).toBe(false);
         } finally {
-          record(c.name, { result });
+          record(c.name, { result, passed });
         }
       } else {
         // contrast: treatment (real harness) vs control (empty tmpdir, no on-disk config).
@@ -193,14 +216,15 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         });
         logTrace(`${c.name} [treatment]`, treatment);
         logTrace(`${c.name} [control]`, control);
+        // Each side records its OWN expectation: treatment should read the doc, control should not.
+        const treatmentRead = readIncludes(treatment.filesRead, c.expectFileRead);
+        const controlRead = readIncludes(control.filesRead, c.expectFileRead);
         try {
-          const treatmentRead = treatment.filesRead.some((f) => f.includes(c.expectFileRead));
-          const controlRead = control.filesRead.some((f) => f.includes(c.expectFileRead));
           expect(treatmentRead, `treatment reads: ${treatment.filesRead.join(", ")}`).toBe(true);
           expect(controlRead, `control reads: ${control.filesRead.join(", ")}`).toBe(false);
         } finally {
-          record(`${c.name} [treatment]`, { result: treatment });
-          record(`${c.name} [control]`, { result: control });
+          record(`${c.name} [treatment]`, { result: treatment, passed: treatmentRead });
+          record(`${c.name} [control]`, { result: control, passed: !controlRead });
         }
       }
     });

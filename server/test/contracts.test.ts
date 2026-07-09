@@ -10,6 +10,7 @@ import {
   Conformance,
   Onboarding,
   EvalRun,
+  EvalExpectation,
   MemoryItem,
   RunTrace,
   Settings,
@@ -152,6 +153,64 @@ describe('AI contracts parse fixtures', () => {
         sources: [{ pr: 401, context: 'ctx' }],
       }),
     ).not.toThrow();
+  });
+
+  it('EvalExpectation — accepts well-formed must_find and must_not_flag', () => {
+    expect(
+      EvalExpectation.safeParse({
+        kind: 'must_find',
+        findings: [
+          {
+            file: 'src/config.ts',
+            start_line: 12,
+            end_line: 12,
+            severity: 'CRITICAL',
+            category: 'security',
+            title: 'Hardcoded secret',
+          },
+        ],
+      }).success,
+    ).toBe(true);
+
+    expect(
+      EvalExpectation.safeParse({
+        kind: 'must_not_flag',
+        findings: [{ file: 'src/config.ts', start_line: 12, end_line: 12 }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it('EvalExpectation — rejects malformed input', () => {
+    // missing `kind`
+    expect(
+      EvalExpectation.safeParse({
+        findings: [{ file: 'a.ts', start_line: 1, end_line: 1 }],
+      }).success,
+    ).toBe(false);
+
+    // non-array `findings`
+    expect(
+      EvalExpectation.safeParse({
+        kind: 'must_find',
+        findings: { file: 'a.ts', start_line: 1, end_line: 1 },
+      }).success,
+    ).toBe(false);
+
+    // missing `start_line`
+    expect(
+      EvalExpectation.safeParse({
+        kind: 'must_find',
+        findings: [{ file: 'a.ts', end_line: 1 }],
+      }).success,
+    ).toBe(false);
+
+    // invalid `kind` value
+    expect(
+      EvalExpectation.safeParse({
+        kind: 'not_a_real_kind',
+        findings: [],
+      }).success,
+    ).toBe(false);
   });
 
   it('RunTrace (data2.jsx TRACE single-document)', () => {

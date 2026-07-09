@@ -3,9 +3,22 @@ import { render, screen, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
+import evalsMessages from "../../../../../../../../messages/en/evals.json";
 
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+// FindingCard (rendered by FindingsPanel) now calls useCreateEvalFromFinding();
+// stub it so this smoke test needs no QueryClientProvider.
+vi.mock("../../../../../../../lib/hooks/evals", () => ({
+  useCreateEvalFromFinding: () => ({ mutate: vi.fn(), isPending: false, isSuccess: false }),
+}));
+
+// FindingCard also calls useToast() for the "case created" confirmation;
+// stub it so this smoke test needs no <ToastProvider>.
+vi.mock("../../../../../../../lib/toast", () => ({
+  useToast: () => ({ success: vi.fn(), error: vi.fn(), info: vi.fn(), toast: vi.fn() }),
 }));
 
 import { FindingsPanel } from "./FindingsPanel";
@@ -35,7 +48,7 @@ const FINDINGS: FindingRecord[] = [
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ prReview: messages, evals: evalsMessages }}>
       {ui}
     </NextIntlClientProvider>,
   );

@@ -2,28 +2,44 @@ import type { CSSProperties } from "react";
 
 /** Co-located styles for FindingCard (extracted from inline styles). */
 export const s = {
-  card: (focused: boolean, sevColor: string, muted: boolean): CSSProperties => ({
+  // NOTE: the muted (accepted/dismissed) de-emphasis is applied to the HEADER
+  // and rationale content, NOT the whole card — CSS opacity on the card root
+  // dims every descendant (unoverridable), which greyed out the action buttons
+  // (esp. "Turn into eval case") and made them read as disabled.
+  card: (focused: boolean, sevColor: string): CSSProperties => ({
     borderRadius: 8,
-    // All-longhand (never mix `border` shorthand with `borderLeft` — React warns
-    // about updating shorthand + non-shorthand on the same rerender).
+    // Genuinely all-longhand: `borderColor`/`borderWidth` are SHORTHANDS (they
+    // set all four sides), so mixing them with `borderLeftColor`/`borderLeftWidth`
+    // makes React warn when the shorthand updates on rerender (focused toggles the
+    // color). Use the per-side longhands so the left border can differ cleanly.
     borderStyle: "solid",
-    borderColor: focused ? sevColor : "var(--border)",
-    borderWidth: 1,
-    borderLeftWidth: 3,
+    borderTopColor: focused ? sevColor : "var(--border)",
+    borderRightColor: focused ? sevColor : "var(--border)",
+    borderBottomColor: focused ? sevColor : "var(--border)",
     borderLeftColor: sevColor,
+    borderTopWidth: 1,
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    borderLeftWidth: 3,
     background: "var(--bg-elevated)",
     overflow: "hidden",
-    opacity: muted ? 0.6 : 1,
-    transition: "opacity .2s, border-color .12s, box-shadow .12s",
+    transition: "border-color .12s, box-shadow .12s",
     boxShadow: focused ? "0 0 0 1px " + sevColor : "none",
   }),
-  header: {
+  /** Muted findings dim the HEADER (and rationale, see `dim`) — never the card
+   *  root — so the action row stays at full opacity. */
+  header: (muted: boolean): CSSProperties => ({
     display: "flex",
     alignItems: "flex-start",
     gap: 12,
     padding: "14px 16px",
     cursor: "pointer",
-  } satisfies CSSProperties,
+    opacity: muted ? 0.6 : 1,
+    transition: "opacity .2s",
+  }),
+  /** Wraps the rationale/suggestion so muted findings de-emphasize their content
+   *  while the sibling action row keeps full opacity. */
+  dim: (muted: boolean): CSSProperties => ({ opacity: muted ? 0.6 : 1 }),
   badgeWrap: { paddingTop: 1 } satisfies CSSProperties,
   headerMain: { flex: 1, minWidth: 0 } satisfies CSSProperties,
   titleRow: {
