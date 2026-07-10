@@ -273,24 +273,27 @@ export class OctokitGitHubClient implements GitHubClient {
           const name = repo.name;
           const g = this.octokit.rest.git;
 
-          // Parent commit: the target branch if it already exists, else the base.
-          let parentSha: string;
+          // Reset-to-base: the branch is export-owned, so every export force-updates
+          // it to base-tree + exactly the current bundle — never layered on the
+          // branch's own prior contents (that would let a stale manifest survive).
+          const baseRef = await g.getRef({ owner, repo: name, ref: `heads/${payload.base}` });
+          const baseSha = baseRef.data.object.sha;
+          const baseCommit = await g.getCommit({ owner, repo: name, commit_sha: baseSha });
+
+          // Probe the target branch SOLELY to pick createRef vs updateRef — never
+          // read its tree/commit, and never write to `heads/${payload.base}`.
           let branchExists = false;
           try {
-            const ref = await g.getRef({ owner, repo: name, ref: `heads/${payload.branch}` });
-            parentSha = ref.data.object.sha;
+            await g.getRef({ owner, repo: name, ref: `heads/${payload.branch}` });
             branchExists = true;
           } catch {
-            const baseRef = await g.getRef({ owner, repo: name, ref: `heads/${payload.base}` });
-            parentSha = baseRef.data.object.sha;
+            branchExists = false;
           }
 
-          // New tree layered on the parent's tree (so unrelated files are kept).
-          const parentCommit = await g.getCommit({ owner, repo: name, commit_sha: parentSha });
           const tree = await g.createTree({
             owner,
             repo: name,
-            base_tree: parentCommit.data.tree.sha,
+            base_tree: baseCommit.data.tree.sha,
             tree: payload.files.map((f) => ({
               path: f.path,
               mode: '100644',
@@ -304,7 +307,7 @@ export class OctokitGitHubClient implements GitHubClient {
             repo: name,
             message: payload.message,
             tree: tree.data.sha,
-            parents: [parentSha],
+            parents: [baseSha],
           });
 
           if (branchExists) {

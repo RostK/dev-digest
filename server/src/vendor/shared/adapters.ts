@@ -134,7 +134,7 @@ export interface CommitFile {
 export interface CommitFilesPayload {
   /** Branch to create-or-update with the commit (e.g. "devdigest/ci"). */
   branch: string;
-  /** Base branch to fork from when `branch` does not yet exist (e.g. "main"). */
+  /** Base branch whose tree `branch` is reset to (e.g. "main"). */
   base: string;
   message: string;
   files: CommitFile[];
@@ -163,9 +163,10 @@ export interface GitHubClient {
   ): Promise<PrReviewComment>;
   openPullRequest(repo: RepoRef, payload: OpenPrPayload): Promise<{ url: string }>;
   /**
-   * Commit `files` onto `branch` as ONE atomic commit (Git Data API: blobs →
-   * tree → commit → ref). Creates the branch from `base` if missing, else
-   * fast-forwards it. Idempotent: re-publishing just adds a new commit.
+   * Force-updates `branch` so its tree = `base` branch's tree + exactly `files`
+   * (Git Data API: blobs → tree → commit → ref, one atomic commit). The branch is
+   * export-owned: any prior content on it — a stale manifest, an unrelated file —
+   * is discarded on every call. Targets the `branch` ref only, never `base`.
    */
   commitFiles(repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }>;
   /** The open PR whose head is `branch`, if any (so re-publish reuses it). */

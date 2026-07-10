@@ -126,6 +126,14 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Files on the base branch (path → contents) — seeds `commitFiles`' reset-to-base. */
+  baseTree?: Record<string, string>;
+  /** Pre-existing files per branch (path → contents), keyed by branch name — seeds a
+   *  broken/PR-#22 multi-manifest branch or unrelated branch-only files. */
+  branchFiles?: Record<string, Record<string, string>>;
+  /** When set, `commitFiles` throws an object with this `status` instead of committing —
+   *  drives the 403→422 mapping without a real network call. */
+  throwOnCommit?: { status: number };
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -133,8 +141,19 @@ export class MockGitHubClient implements GitHubClient {
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
+  /** Resolved post-commit branch contents (path → contents), keyed by branch name. */
+  public branches: Record<string, Record<string, string>> = {};
+  /** Every reset-to-base commitFiles call, recorded for AC-7 assertions. */
+  public resets: { branch: string; base: string }[] = [];
 
-  constructor(private opts: MockGitHubOptions = {}) {}
+  constructor(private opts: MockGitHubOptions = {}) {
+    // Seed pre-existing branch state (e.g. the broken/PR-#22 two-manifest branch,
+    // or an unrelated branch-only file) so commitFiles' reset-to-base has
+    // something real to discard.
+    for (const [branch, files] of Object.entries(opts.branchFiles ?? {})) {
+      this.branches[branch] = { ...files };
+    }
+  }
 
   async listPullRequests(_repo: RepoRef): Promise<PrMeta[]> {
     return (
@@ -222,7 +241,23 @@ export class MockGitHubClient implements GitHubClient {
   }
 
   async commitFiles(_repo: RepoRef, payload: CommitFilesPayload): Promise<{ branch: string }> {
+    if (this.opts.throwOnCommit) {
+      const err = new Error(`mock commitFiles failure: ${this.opts.throwOnCommit.status}`) as Error & {
+        status: number;
+      };
+      err.status = this.opts.throwOnCommit.status;
+      throw err;
+    }
     this.committed.push(payload);
+    // Reset-to-base: rebuild the branch from the base tree + exactly the current
+    // bundle — NEVER layer onto the branch's prior contents (this.branches[branch]),
+    // even though that prior state was seeded above. That's what encodes
+    // reset-to-base and stops a test from falsely passing the old layering behavior.
+    this.branches[payload.branch] = {
+      ...(this.opts.baseTree ?? {}),
+      ...Object.fromEntries(payload.files.map((f) => [f.path, f.contents])),
+    };
+    this.resets.push({ branch: payload.branch, base: payload.base });
     return { branch: payload.branch };
   }
 
