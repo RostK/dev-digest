@@ -1,4 +1,4 @@
-# Spec: Agent Performance dashboard  |  Spec ID: SPEC-09  |  Status: approved
+# Spec: Agent Performance dashboard  |  Spec ID: SPEC-09  |  Status: draft
 Supersedes: none
 Date: 2026-07-11
 Module: cross

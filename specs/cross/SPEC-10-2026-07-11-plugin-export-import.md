@@ -1,4 +1,4 @@
-# Spec: Plugin Export/Import  |  Spec ID: SPEC-10  |  Status: approved
+# Spec: Plugin Export/Import  |  Spec ID: SPEC-10  |  Status: draft
 Supersedes: none
 Date: 2026-07-11
 Module: cross
