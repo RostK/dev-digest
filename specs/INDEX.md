@@ -14,3 +14,5 @@ The `spec-author` agent appends a row here for every new spec and updates Status
 | SPEC-06 | 2026-07-08 | Multi-Agent Review | cross | approved | none | [cross/SPEC-06-2026-07-08-multi-agent-review.md](cross/SPEC-06-2026-07-08-multi-agent-review.md) |
 | SPEC-07 | 2026-07-08 | Export to CI | cross | approved | none | [cross/SPEC-07-2026-07-08-export-to-ci.md](cross/SPEC-07-2026-07-08-export-to-ci.md) |
 | SPEC-08 | 2026-07-10 | Idempotent Export to CI (bug-fix, amends SPEC-07) | cross | approved | none | [cross/SPEC-08-2026-07-10-ci-export-idempotent.md](cross/SPEC-08-2026-07-10-ci-export-idempotent.md) |
+| SPEC-09 | 2026-07-11 | Agent Performance dashboard | cross | approved | none | [cross/SPEC-09-2026-07-11-agent-performance-dashboard.md](cross/SPEC-09-2026-07-11-agent-performance-dashboard.md) |
+| SPEC-10 | 2026-07-11 | Plugin Export/Import | cross | approved | none | [cross/SPEC-10-2026-07-11-plugin-export-import.md](cross/SPEC-10-2026-07-11-plugin-export-import.md) |
