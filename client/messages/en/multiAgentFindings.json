@@ -1,0 +1,24 @@
+{
+  "card": {
+    "accepted": "accepted",
+    "dismissed": "dismissed",
+    "suggestedFix": "Suggested fix",
+    "accept": "Accept",
+    "dismiss": "Dismiss",
+    "turnIntoEvalCase": "Turn into eval case",
+    "learn": "Learn",
+    "replyToAuthor": "Reply to author",
+    "comingSoon": "Coming soon"
+  },
+  "evalCase": {
+    "copied": "Eval-case template copied to clipboard",
+    "copyFailed": "Couldn’t copy the eval-case template"
+  },
+  "conflicts": {
+    "title": "Where agents disagree",
+    "onlyConflicts": "Show only conflicts",
+    "didNotFlag": "Did not flag",
+    "emptyTitle": "No conflicts",
+    "emptyBody": "No groups have a divergence — every flagged location is fully agreed on."
+  }
+}

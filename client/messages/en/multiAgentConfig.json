@@ -1,0 +1,38 @@
+{
+  "picker": {
+    "trigger": "Pick agents to run",
+    "clear": "Clear",
+    "runButton": "Run multi-agent review ({count})",
+    "starting": "Starting…",
+    "configureAgents": "Configure agents…",
+    "empty": "No agents yet — create one",
+    "estimate": "~{seconds}s",
+    "noHistory": "— · no history",
+    "mergedWarning": "Already merged — review is informational",
+    "mergedTooltip": "This PR is already merged; running a review won’t affect the merged code."
+  },
+  "configure": {
+    "crumbLab": "Multi-Agent Review",
+    "crumbTitle": "Configure run",
+    "title": "Configure a multi-agent review",
+    "step1": {
+      "label": "Pull request",
+      "placeholder": "Select a pull request…"
+    },
+    "step2": {
+      "label": "Agents to run",
+      "selectAll": "Select all",
+      "noPrTitle": "Pick a pull request first …",
+      "noPrBody": "Choose a pull request above to see which agents you can run on it.",
+      "noAgentsTitle": "No agents yet",
+      "noAgentsBody": "Create an agent before running a multi-agent review.",
+      "noRuns": "No runs yet on this PR",
+      "estimate": "{time} · {cost}"
+    },
+    "runButton": "Run multi-agent review ({count})",
+    "starting": "Starting…",
+    "summary": "≈ {time} · {cost} · parallel fan-out",
+    "summaryPartial": "≥ ≈ {time} · {cost} · parallel fan-out",
+    "summaryEmpty": "Pick agents to see an estimate"
+  }
+}
