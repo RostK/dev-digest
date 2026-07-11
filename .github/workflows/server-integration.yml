@@ -15,10 +15,12 @@ on:
     branches: [main]
     paths:
       - 'server/**'
+      - 'agent-runner/**'
       - '.github/workflows/server-integration.yml'
   pull_request:
     paths:
       - 'server/**'
+      - 'agent-runner/**'
       - '.github/workflows/server-integration.yml'
 
 permissions:
@@ -56,6 +58,18 @@ jobs:
       - name: Install reviewer-core deps
         working-directory: reviewer-core
         run: npm ci
+
+      # The CI Export feature embeds the pre-built runner bundle
+      # (agent-runner/dist/*) into every export, and ci-export.it.test.ts drives
+      # a real install → so the runner MUST be built here or readRunnerFiles()
+      # throws ConfigError and the route 500s. dist/ is gitignored (a build
+      # artifact). agent-runner consumes reviewer-core + @devdigest/shared as
+      # source (installed above) and bundles them with ncc; it uses pnpm.
+      - name: Build agent-runner (CI export bundle embeds dist/*)
+        working-directory: agent-runner
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
 
       # Inlined rather than `pnpm test:integration`: server/package.json is
       # skip-worktree, so we don't rely on the committed file carrying the split

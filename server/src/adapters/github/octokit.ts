@@ -11,6 +11,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRunMeta,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
@@ -272,24 +273,27 @@ export class OctokitGitHubClient implements GitHubClient {
           const name = repo.name;
           const g = this.octokit.rest.git;
 
-          // Parent commit: the target branch if it already exists, else the base.
-          let parentSha: string;
+          // Reset-to-base: the branch is export-owned, so every export force-updates
+          // it to base-tree + exactly the current bundle — never layered on the
+          // branch's own prior contents (that would let a stale manifest survive).
+          const baseRef = await g.getRef({ owner, repo: name, ref: `heads/${payload.base}` });
+          const baseSha = baseRef.data.object.sha;
+          const baseCommit = await g.getCommit({ owner, repo: name, commit_sha: baseSha });
+
+          // Probe the target branch SOLELY to pick createRef vs updateRef — never
+          // read its tree/commit, and never write to `heads/${payload.base}`.
           let branchExists = false;
           try {
-            const ref = await g.getRef({ owner, repo: name, ref: `heads/${payload.branch}` });
-            parentSha = ref.data.object.sha;
+            await g.getRef({ owner, repo: name, ref: `heads/${payload.branch}` });
             branchExists = true;
           } catch {
-            const baseRef = await g.getRef({ owner, repo: name, ref: `heads/${payload.base}` });
-            parentSha = baseRef.data.object.sha;
+            branchExists = false;
           }
 
-          // New tree layered on the parent's tree (so unrelated files are kept).
-          const parentCommit = await g.getCommit({ owner, repo: name, commit_sha: parentSha });
           const tree = await g.createTree({
             owner,
             repo: name,
-            base_tree: parentCommit.data.tree.sha,
+            base_tree: baseCommit.data.tree.sha,
             tree: payload.files.map((f) => ({
               path: f.path,
               mode: '100644',
@@ -303,7 +307,7 @@ export class OctokitGitHubClient implements GitHubClient {
             repo: name,
             message: payload.message,
             tree: tree.data.sha,
-            parents: [parentSha],
+            parents: [baseSha],
           });
 
           if (branchExists) {
@@ -368,5 +372,63 @@ export class OctokitGitHubClient implements GitHubClient {
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
+  }
+
+  async listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRunMeta[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRuns({
+            owner: repo.owner,
+            repo: repo.name,
+            workflow_id: workflowFile,
+            per_page: 50,
+          });
+          return res.data.workflow_runs.map((run) => ({
+            id: run.id,
+            html_url: run.html_url,
+            // GitHub only populates `pull_requests` for same-repo (non-fork) PRs.
+            pr_number: run.pull_requests?.[0]?.number ?? null,
+            created_at: run.created_at,
+            conclusion: run.conclusion,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  async downloadRunArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<Uint8Array | null> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const artifacts = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+            owner: repo.owner,
+            repo: repo.name,
+            run_id: runId,
+            per_page: 100,
+          });
+          const artifact = artifacts.data.artifacts.find((a) => a.name === artifactName);
+          if (!artifact) return null;
+          try {
+            const download = await this.octokit.rest.actions.downloadArtifact({
+              owner: repo.owner,
+              repo: repo.name,
+              artifact_id: artifact.id,
+              archive_format: 'zip',
+            });
+            return new Uint8Array(download.data as ArrayBuffer);
+          } catch {
+            // Artifact expired/not found between list and download — treat as absent.
+            return null;
+          }
+        })(),
+        TIMEOUT,
+      ),
+    );
   }
 }

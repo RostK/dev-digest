@@ -255,15 +255,25 @@ export type AgentManifest = z.infer<typeof AgentManifest>;
 /** Caller-facing input type — `.default()` fields stay optional. */
 export type AgentManifestInput = z.input<typeof AgentManifest>;
 
-/** Request body for `POST /agents/:id/export-ci`. */
+/** Request body for `POST /agents/:id/ci/preview` and `.../ci/install`. */
 export const CiExportInput = z.object({
   repo: z.string().min(1), // "owner/name"
   target: CiTarget.default('gha'),
   /** "open_pr" opens a PR with the files; "files" just returns/persists them. */
   action: z.enum(['open_pr', 'files']).default('open_pr'),
   post_as: z.enum(['github_review', 'pr_comment', 'none']).default('github_review'),
-  triggers: z.array(z.string()).default(['opened', 'synchronize', 'reopened']),
+  // enum, NOT free string: these values are interpolated into the generated
+  // workflow YAML — restricting them here blocks YAML injection into the
+  // lethal-trifecta `.github/workflows/devdigest-review.yml`.
+  triggers: z.array(z.enum(['opened', 'synchronize', 'reopened'])).default(['opened', 'synchronize', 'reopened']),
   base: z.string().default('main'),
+  /**
+   * The user-edited workflow YAML from the Preview step (AC-4). When present it
+   * is committed VERBATIM instead of regenerating from `triggers`/`post_as`,
+   * honoring the hand-edit. Re-validating it against the security invariants
+   * before commit is a deferred Non-goal — the reviewed config PR is the backstop.
+   */
+  workflow_override: z.string().optional(),
 });
 export type CiExportInput = z.infer<typeof CiExportInput>;
 /** Caller-facing input type — `.default()` fields stay optional (web hooks). */
@@ -279,9 +289,10 @@ export const CiInstallation = z.object({
 });
 export type CiInstallation = z.infer<typeof CiInstallation>;
 
-/** Response of `POST /agents/:id/export-ci`. */
+/** Response of `POST /agents/:id/ci/install`. */
 export const CiExport = z.object({
-  installation: CiInstallation,
+  // nullable: `action:'files'` (AC-14) returns the bundle with NO installation row.
+  installation: CiInstallation.nullable(),
   files: z.array(CiFile),
   pr_url: z.string().nullable(),
 });
@@ -303,6 +314,8 @@ export const CiRun = z.object({
   source: z.string().nullable(),
   agent: z.string().nullish(),
   duration_s: z.number().nullish(),
+  repo: z.string().nullish(),
+  target_type: CiTarget.nullish(),
 });
 export type CiRun = z.infer<typeof CiRun>;
 

@@ -37,6 +37,7 @@ export const NAV: NavGroup[] = [
         href: "/project-context",
         gKey: "x",
       },
+      { key: "ci-runs", label: "CI Runs", icon: "Workflow", href: "/ci", gKey: "i" },
     ],
   },
   {
@@ -93,6 +94,7 @@ export const SHORTCUTS: ShortcutDef[] = [
   { keys: "g e", label: "Go to Eval Dashboard", group: "Navigation" },
   { keys: "g x", label: "Go to Project Context", group: "Navigation" },
   { keys: "g m", label: "Go to Multi-Agent Review", group: "Navigation" },
+  { keys: "g i", label: "Go to CI Runs", group: "Navigation" },
   { keys: "j / k", label: "Next / previous finding", group: "Findings" },
   { keys: "a", label: "Accept finding", group: "Findings" },
   { keys: "d", label: "Dismiss finding", group: "Findings" },

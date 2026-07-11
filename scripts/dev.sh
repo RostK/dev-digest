@@ -37,6 +37,16 @@ warn() { printf '\033[1;33m! %s\033[0m\n' "$*"; }
 command -v docker >/dev/null || { echo "docker not found"; exit 1; }
 command -v pnpm   >/dev/null || { echo "pnpm not found (npm i -g pnpm)"; exit 1; }
 
+# --- pnpm 11 compatibility ---------------------------------------------------
+# pnpm 11 aborts this script (set -e) two ways: (1) every `pnpm <script>` first
+# runs a `verify-deps-before-run` install that can exit non-zero, and (2) a fresh
+# `pnpm install` exits 1 on ERR_PNPM_IGNORED_BUILDS (ignored esbuild/sharp/ssh2
+# build scripts). Neither is fatal for local dev — those deps ship prebuilt
+# binaries — so downgrade both to non-blocking. This runs NO build scripts (that
+# would need --dangerously-allow-all-builds, which we deliberately do NOT set).
+export PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN=false
+export PNPM_CONFIG_STRICT_DEP_BUILDS=false
+
 # --- env files ---------------------------------------------------------------
 for dir in server client; do
   if [ ! -f "$dir/.env" ] && [ -f "$dir/.env.example" ]; then
@@ -78,6 +88,16 @@ install_if_needed server
 # reviewer-core's RAW source is imported by the API at runtime (tsconfig alias);
 # without its deps the API crashes at boot with ERR_MODULE_NOT_FOUND. It uses npm.
 [ -d reviewer-core/node_modules ] || { log "installing deps in reviewer-core"; (cd reviewer-core && npm ci); }
+
+# agent-runner is a standalone package (own pnpm lockfile) the API invokes for
+# multi-agent runs and the Export-to-CI preview. Unlike the others it must be
+# BUILT (ncc → dist/) or those features fail with "agent-runner build output not
+# found at .../agent-runner/dist". Uses pnpm.
+install_if_needed agent-runner
+if [ ! -f agent-runner/dist/index.js ]; then
+  log "building agent-runner (ncc → dist)"
+  (cd agent-runner && pnpm build)
+fi
 
 # --- migrate + seed ----------------------------------------------------------
 log "applying migrations"
