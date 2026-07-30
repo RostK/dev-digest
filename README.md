@@ -69,21 +69,22 @@ Each package has its own README with deeper diagrams:
 
 ## What I built on top
 
-The starter does one thing: import a PR, run a single review. On top of that:
+The starter provided the platform: repo ingestion, PR import, the diff viewer,
+agent config, `repo-intel` indexing and the grounding gate. What I added, over
+46 commits:
 
 | Area | Built |
 |---|---|
-| Review depth | Multi-agent review with concurrent fan-out and live per-agent results (`multi-agent-review`) |
-| Context | Intent layer and Smart Diff; Project Context folder (`project-context`), onboarding generator (`onboarding`), PR Brief card (`brief`) |
-| Codebase awareness | `repo-intel` symbol and import-graph indexing, feeding the repo map into every review; Blast Radius (`blast`) |
-| Accuracy | Grounding gate dropping hallucinated line references; an eval package (`evals/`) with a regression harness and dashboards |
-| Reuse | Reusable review skills (`skills`), conventions extractor (`conventions`) |
-| Reach | `mcp/` — a read-only MCP stdio server over `repo-intel` |
-| CI | `agent-runner/` package and Export to CI (`ci`) — idempotent re-export of a review into a GitHub Actions workflow |
+| Context | Intent Layer and Smart Diff — a zero-token pass that reorders the diff by risk; Project Context folder (`project-context`), onboarding generator (`onboarding`), PR Why+Risk Brief (`brief`) |
+| Reuse | Reusable review skills (`skills`) and a conventions extractor (`conventions`) |
+| Review depth | Multi-Agent Review (`multi-agent-review`) — concurrent fan-out across agents, live per-agent results, and conflict detection where they disagree |
+| Measurement | A standalone eval package (`evals/`) — regression harness, dashboards, OpenRouter engine and a CI gate, routed per suite so a skill change runs that skill's eval |
+| Reach | `mcp/` — a read-only MCP stdio server over the index; PR Blast Radius (`blast`) |
+| CI | `agent-runner/` and Export to CI (`ci`) — idempotent re-export of a review as a GitHub Action |
 
+Nine server modules, three new packages, and ~10k lines of tests alongside them.
 Written with heavy use of Claude Code, under the review practices the course is
-about: every finding the model produces is validated against the diff before it
-is persisted, and the eval package exists to catch the reviewer regressing.
+about — which is also why `evals/` exists: to catch the reviewer regressing.
 
 ## Prerequisites
 
