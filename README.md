@@ -1,9 +1,13 @@
-# DevDigest — starter
+# DevDigest
 
-Local-first AI pull-request review. This is the **course starter template**: a
-minimal-but-working tool that does exactly one thing end to end — **import a PR
-and run an agent review on it**. Every later course lesson adds one feature back
-(see [_What you build in the course_](#what-you-build-in-the-course)).
+Local-first AI pull-request review: import a pull request, run agent reviews over
+the diff, and export the same review into CI as a GitHub Action.
+
+Capstone for the Neoversity *AI Agentic Engineering* course, senior engineering
+track. It begins from the course starter template — a minimal tool that imports a
+PR and runs one review pass — and builds the course's features on top of it. What
+that came to is in [_What I built on top_](#what-i-built-on-top); everything
+listed there is on `main`.
 
 Several standalone packages (no monorepo workspace — each has its own
 `package.json` and lockfile; cross-package code is shared through tsconfig path
@@ -63,30 +67,23 @@ Each package has its own README with deeper diagrams:
 [`reviewer-core`](reviewer-core/README.md) (review pipeline) ·
 [`e2e`](e2e/README.md).
 
-## What works on day 1
+## What I built on top
 
-- **Local launch** — one command brings up Postgres (Docker) + API + web.
-- **Settings** — store your LLM API key (OpenAI / Anthropic) and GitHub token.
-- **Add repository** — paste a repo URL; the server clones and indexes it.
-- **Import pull requests** — pull open PRs and their diff, commits, body, and linked issue.
-- **View diff** — GitHub-like diff in the browser.
-- **Agents** — two built-in reviewers (General + Security); create/edit your own (model + system prompt).
-- **Run a review** — single-pass analysis returning structured findings (severity + score), with the grounding gate and repo-map context working from the start.
+The starter does one thing: import a PR, run a single review. On top of that:
 
-## What you build in the course
+| Area | Built |
+|---|---|
+| Review depth | Multi-agent review with concurrent fan-out and live per-agent results (`multi-agent-review`) |
+| Context | Intent layer and Smart Diff; Project Context folder (`project-context`), onboarding generator (`onboarding`), PR Brief card (`brief`) |
+| Codebase awareness | `repo-intel` symbol and import-graph indexing, feeding the repo map into every review; Blast Radius (`blast`) |
+| Accuracy | Grounding gate dropping hallucinated line references; an eval package (`evals/`) with a regression harness and dashboards |
+| Reuse | Reusable review skills (`skills`), conventions extractor (`conventions`) |
+| Reach | `mcp/` — a read-only MCP stdio server over `repo-intel` |
+| CI | `agent-runner/` package and Export to CI (`ci`) — idempotent re-export of a review into a GitHub Actions workflow |
 
-These are intentionally **not** in the starter — each lesson adds one back:
-
-| Lesson | You build |
-|--------|-----------|
-| L01 | Run cost badge · severity filter on findings |
-| L02 | Skills in the product · Conventions extractor |
-| L03 | Intent layer · Smart Diff |
-| L04 | `devdigest-mcp` server · Blast Radius (reads `repo-intel`) |
-| L05 | Project Context Folder · Onboarding generator · PR Brief card |
-| L06 | Eval pipeline · Secret/Phantom gates · Plan Verifier · Export to CI |
-| L07 | Multi-agent review · Run Trace / Live Log · Persistent memory · per-agent stats |
-| L08 | Plugin export/import · Agent performance dashboard · weekly digest |
+Written with heavy use of Claude Code, under the review practices the course is
+about: every finding the model produces is validated against the diff before it
+is persisted, and the eval package exists to catch the reviewer regressing.
 
 ## Prerequisites
 
